@@ -5,25 +5,41 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Brand colors for cleaning services app
+const primaryOrange = '#FF6B35';
+const secondaryBlue = '#2A9D8F';
+const white = '#FFFFFF';
 
 export const Colors = {
   light: {
     text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
+    background: white,
+    tint: primaryOrange,
     icon: '#687076',
     tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    tabIconSelected: primaryOrange,
+    primary: primaryOrange,
+    secondary: secondaryBlue,
+    card: white,
+    border: '#E5E5E5',
+    success: '#4CAF50',
+    warning: '#FFC107',
+    error: '#F44336',
   },
   dark: {
     text: '#ECEDEE',
     background: '#151718',
-    tint: tintColorDark,
+    tint: primaryOrange,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tabIconSelected: primaryOrange,
+    primary: primaryOrange,
+    secondary: secondaryBlue,
+    card: '#1E1E1E',
+    border: '#2C2C2C',
+    success: '#4CAF50',
+    warning: '#FFC107',
+    error: '#F44336',
   },
 };
 
