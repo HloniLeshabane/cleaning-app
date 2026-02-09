@@ -1,29 +1,136 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { apiClient } from '@/services/api';
+import { Service } from '@/types/api';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 export default function BookCleanerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
+
+  const [services, setServices] = useState<Service[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     date: '',
     time: '',
     address: '',
     notes: '',
-    serviceType: 'standard',
+    serviceId: '',
   });
 
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      setIsLoading(true);
+      const data = await apiClient.getServices();
+      console.log('Services API response:', data);
+      if (Array.isArray(data)) {
+        const activeServices = data.filter((s) => s.active);
+        setServices(activeServices);
+        if (activeServices.length > 0) {
+          setFormData((prev) => ({ ...prev, serviceId: activeServices[0].id }));
+        }
+      } else {
+        console.error('API response is not an array:', data);
+        Alert.alert('Error', 'Invalid response from server.');
+      }
+    } catch (err: any) {
+      console.error('Failed to load services:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to load services. Please try again.';
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Validation
+    if (!isAuthenticated) {
+      Alert.alert('Login Required', 'Please log in to book a service.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log In', onPress: () => router.push('/modal') },
+      ]);
+      return;
+    }
+
+    if (!formData.date) {
+      Alert.alert('Missing Information', 'Please select a date.');
+      return;
+    }
+
+    if (!formData.time) {
+      Alert.alert('Missing Information', 'Please select a time.');
+      return;
+    }
+
+    if (!formData.address.trim()) {
+      Alert.alert('Missing Information', 'Please enter your service address.');
+      return;
+    }
+
+    if (!formData.serviceId) {
+      Alert.alert('Missing Information', 'Please select a service.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Convert date to YYYY-MM-DD format
+      const dateObj = new Date(formData.date);
+      const formattedDate = dateObj.toISOString().split('T')[0];
+
+      // Convert time from "09:00 AM" to "09:00" (24-hour format)
+      const formattedTime = convert12to24(formData.time);
+
+      await apiClient.createBooking({
+        serviceId: formData.serviceId,
+        bookingDate: formattedDate,
+        bookingTime: formattedTime,
+        address: formData.address,
+        specialInstructions: formData.notes || undefined,
+      });
+
+      Alert.alert('Success', 'Booking created successfully!', [
+        { text: 'OK', onPress: () => router.push('/(tabs)/bookings') },
+      ]);
+    } catch (err: any) {
+      console.error('Failed to create booking:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to create booking. Please try again.';
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const convert12to24 = (time12: string): string => {
+    const [time, period] = time12.split(' ');
+    let [hours, minutes] = time.split(':');
+    if (period === 'PM' && hours !== '12') {
+      hours = String(parseInt(hours, 10) + 12);
+    } else if (period === 'AM' && hours === '12') {
+      hours = '00';
+    }
+    return `${hours.padStart(2, '0')}:${minutes}`;
+  };
+
   const timeSlots = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'];
-  const serviceTypes = [
-    { id: 'standard', name: 'Standard Clean', icon: '🏠' },
-    { id: 'deep', name: 'Deep Clean', icon: '✨' },
-  ];
+
+  const selectedService = services.find((s) => s.id === formData.serviceId);
 
   return (
     <ThemedView style={styles.container}>
@@ -42,38 +149,65 @@ export default function BookCleanerScreen() {
         </View>
 
         {/* Form */}
-        <View style={styles.form}>
-          {/* Service Type Selection */}
-          <View style={styles.formGroup}>
-            <View style={styles.serviceTypeRow}>
-              {serviceTypes.map((type) => (
-                <Pressable
-                  key={type.id}
-                  style={[
-                    styles.serviceTypeCard,
-                    { backgroundColor: formData.serviceType === type.id ? colors.primary : colors.secondary },
-                  ]}
-                  onPress={() => setFormData({ ...formData, serviceType: type.id })}>
-                  <ThemedText style={styles.serviceTypeIcon}>{type.icon}</ThemedText>
-                  <ThemedText style={styles.serviceTypeText}>{type.name}</ThemedText>
-                </Pressable>
-              ))}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.tint} />
+            <ThemedText style={styles.loadingText}>Loading services...</ThemedText>
+          </View>
+        ) : (
+          <View style={styles.form}>
+            {/* Service Type Selection */}
+            <View style={styles.formGroup}>
+              <ThemedText type="subtitle" style={styles.label}>
+                🧹 Select Service
+              </ThemedText>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.serviceTypeRow}>
+                {services.map((service) => (
+                  <Pressable
+                    key={service.id}
+                    style={[
+                      styles.serviceTypeCard,
+                      { backgroundColor: formData.serviceId === service.id ? colors.primary : colors.card },
+                      { borderColor: formData.serviceId === service.id ? colors.primary : colors.border },
+                    ]}
+                    onPress={() => setFormData({ ...formData, serviceId: service.id })}>
+                    <ThemedText style={styles.serviceTypeIcon}>🧹</ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.serviceTypeText,
+                        { color: formData.serviceId === service.id ? '#FFFFFF' : colors.text },
+                      ]} 
+                      numberOfLines={2}>
+                      {service.name}
+                    </ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.servicePriceText,
+                        { color: formData.serviceId === service.id ? '#FFFFFF' : colors.text },
+                      ]}>
+                      R {service.price}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
-          </View>
 
-          {/* Date Selection */}
-          <View style={styles.formGroup}>
-            <ThemedText type="subtitle" style={styles.label}>
-              📅 Select Date
-            </ThemedText>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              placeholder="Select date"
-              placeholderTextColor={colors.icon}
-              value={formData.date}
-              onChangeText={(text) => setFormData({ ...formData, date: text })}
-            />
-          </View>
+            {/* Date Selection */}
+            <View style={styles.formGroup}>
+              <ThemedText type="subtitle" style={styles.label}>
+                📅 Select Date
+              </ThemedText>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                placeholder="YYYY-MM-DD (e.g., 2026-02-15)"
+                placeholderTextColor={colors.icon}
+                value={formData.date}
+                onChangeText={(text) => setFormData({ ...formData, date: text })}
+              />
+            </View>
 
           {/* Time Selection */}
           <View style={styles.formGroup}>
@@ -142,11 +276,18 @@ export default function BookCleanerScreen() {
               styles.bookButton,
               { backgroundColor: colors.primary },
               pressed && styles.bookButtonPressed,
+              isSubmitting && styles.bookButtonDisabled,
             ]}
-            onPress={() => router.push('/payment')}>
-            <ThemedText style={styles.bookButtonText}>Next →</ThemedText>
+            onPress={handleSubmit}
+            disabled={isSubmitting}>
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.bookButtonText}>Create Booking</ThemedText>
+            )}
           </Pressable>
         </View>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -194,12 +335,15 @@ const styles = StyleSheet.create({
   serviceTypeRow: {
     flexDirection: 'row',
     gap: 12,
+    paddingRight: 12,
   },
   serviceTypeCard: {
-    flex: 1,
+    width: 140,
     padding: 20,
     borderRadius: 16,
+    borderWidth: 2,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -211,9 +355,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   serviceTypeText: {
-    color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  servicePriceText: {
+    fontSize: 12,
+    opacity: 0.8,
+    textAlign: 'center',
   },
   input: {
     borderWidth: 1.5,
@@ -278,5 +428,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 18,
+  },
+  bookButtonDisabled: {
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    opacity: 0.6,
   },
 });

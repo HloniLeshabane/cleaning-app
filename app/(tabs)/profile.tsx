@@ -1,12 +1,50 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+              Alert.alert('Success', 'Logged out successfully');
+            } catch (err: any) {
+              console.error('Logout failed:', err);
+              const errorMsg = err.response?.data?.message || err.message || 'Failed to log out. Please try again.';
+              Alert.alert('Error', errorMsg);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
 
   const menuItems = [
     { icon: '👤', title: 'Personal Information', subtitle: 'Edit your profile details' },
@@ -23,15 +61,33 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <ThemedText style={styles.avatarText}>HL</ThemedText>
+        {isAuthenticated && user ? (
+          <View style={styles.header}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.avatarText}>{getInitials(user.fullName)}</ThemedText>
+            </View>
+            <ThemedText type="title" style={styles.userName}>
+              {user.fullName || 'User'}
+            </ThemedText>
+            <ThemedText style={styles.userEmail}>{user.email}</ThemedText>
+            <ThemedText style={styles.userPhone}>{user.phone}</ThemedText>
           </View>
-          <ThemedText type="title" style={styles.userName}>
-            Hloni
-          </ThemedText>
-          <ThemedText style={styles.userEmail}>hloni@example.com</ThemedText>
-        </View>
+        ) : (
+          <View style={styles.header}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.avatarText}>?</ThemedText>
+            </View>
+            <ThemedText type="title" style={styles.userName}>
+              Guest
+            </ThemedText>
+            <ThemedText style={styles.userEmail}>Not logged in</ThemedText>
+            <Pressable
+              style={[styles.loginPromptButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/modal')}>
+              <ThemedText style={styles.loginPromptButtonText}>Log In</ThemedText>
+            </Pressable>
+          </View>
+        )}
 
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
@@ -69,11 +125,13 @@ export default function ProfileScreen() {
         </View>
 
         {/* Logout Button */}
-        <Pressable
-          style={[styles.logoutButton, { backgroundColor: colors.error }]}
-          onPress={() => {}}>
-          <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
-        </Pressable>
+        {isAuthenticated && (
+          <Pressable
+            style={[styles.logoutButton, { backgroundColor: colors.error }]}
+            onPress={handleLogout}>
+            <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
+          </Pressable>
+        )}
 
         <ThemedText style={styles.version}>Version 1.0.0</ThemedText>
       </ScrollView>
@@ -120,6 +178,22 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 15,
     opacity: 0.6,
+    marginBottom: 4,
+  },
+  userPhone: {
+    fontSize: 14,
+    opacity: 0.5,
+  },
+  loginPromptButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  loginPromptButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   statsContainer: {
     flexDirection: 'row',

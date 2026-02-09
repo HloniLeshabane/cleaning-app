@@ -14,9 +14,15 @@ export default function TabLayout() {
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
         {/* Uses the existing app icon; replace `icon.png` with your provided logo file if desired. */}
-        <Image source={require('@/assets/images/efforix-klean.png')} style={styles.logo} contentFit="contain" />
+        <Image
+          source={require('@/assets/images/efforix-klean.png')}
+          style={styles.logo}
+          contentFit="contain"
+          accessible
+          accessibilityLabel="Efforix Klean logo"
+        />
       </View>
 
       <Tabs
@@ -72,8 +78,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   logo: {
-    width: 180,
-    height: 48,
+    maxWidth: 140,
+    height: 40,
+    alignSelf: 'center',
   },
 });
 

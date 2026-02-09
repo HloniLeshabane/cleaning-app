@@ -2,52 +2,81 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { apiClient } from '@/services/api';
+import { Service } from '@/types/api';
 import { useRouter } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-const services = [
-  {
-    id: '1',
-    name: 'Standard Clean',
-    description: 'Perfect for regular maintenance',
-    price: 'R 299',
-    duration: '2-3 hours',
-    icon: '🏠',
-    gradient: ['#FF6B35', '#FF8C61'],
-  },
-  {
-    id: '2',
-    name: 'Deep Clean',
-    description: 'Thorough deep cleaning service',
-    price: 'R 499',
-    duration: '4-5 hours',
-    icon: '✨',
-    gradient: ['#2A9D8F', '#4DBAA9'],
-  },
-  {
-    id: '3',
-    name: 'Office Clean',
-    description: 'Professional workspace cleaning',
-    price: 'R 399',
-    duration: '3-4 hours',
-    icon: '🏢',
-    gradient: ['#264653', '#2A9D8F'],
-  },
-  {
-    id: '4',
-    name: 'Move-In/Out',
-    description: 'Complete move-in/out cleaning',
-    price: 'R 699',
-    duration: '5-6 hours',
-    icon: '📦',
-    gradient: ['#E76F51', '#F4A261'],
-  },
-];
+const serviceIcons: Record<string, string> = {
+  'Basic House Cleaning': '🏠',
+  'Standard Clean': '🏠',
+  'Deep Cleaning': '✨',
+  'Deep Clean': '✨',
+  'Bathroom Deep Clean': '🛁',
+  'Kitchen Deep Clean': '🍳',
+  'Office Cleaning': '🏢',
+  'Office Clean': '🏢',
+  'Move-In/Move-Out Cleaning': '📦',
+  'Move-In/Out': '📦',
+};
+
+const serviceGradients: Record<string, string[]> = {
+  'Basic House Cleaning': ['#FF6B35', '#FF8C61'],
+  'Standard Clean': ['#FF6B35', '#FF8C61'],
+  'Deep Cleaning': ['#2A9D8F', '#4DBAA9'],
+  'Deep Clean': ['#2A9D8F', '#4DBAA9'],
+  'Bathroom Deep Clean': ['#2A9D8F', '#4DBAA9'],
+  'Kitchen Deep Clean': ['#2A9D8F', '#4DBAA9'],
+  'Office Cleaning': ['#264653', '#2A9D8F'],
+  'Office Clean': ['#264653', '#2A9D8F'],
+  'Move-In/Move-Out Cleaning': ['#E76F51', '#F4A261'],
+  'Move-In/Out': ['#E76F51', '#F4A261'],
+};
 
 export default function BrowseServicesScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+
+  const [services, setServices] = useState<Service[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await apiClient.getServices();
+      console.log('Services API response:', data);
+      if (Array.isArray(data)) {
+        setServices(data.filter((s) => s.active));
+      } else {
+        console.error('API response is not an array:', data);
+        setError('Invalid response from server.');
+      }
+    } catch (err: any) {
+      console.error('Failed to load services:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to load services. Please try again.';
+      setError(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatPrice = (price: number) => `R ${price}`;
+  const formatDuration = (hours: number) => {
+    if (hours === 1) return '1 hour';
+    if (hours < 1) return `${Math.round(hours * 60)} minutes`;
+    return `${hours} hours`;
+  };
+
+  const getServiceIcon = (name: string) => serviceIcons[name] || '🧹';
+  const getServiceGradient = (name: string) => serviceGradients[name] || ['#6B7280', '#9CA3AF'];
 
   return (
     <ThemedView style={styles.container}>
@@ -86,40 +115,64 @@ export default function BrowseServicesScreen() {
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Our Services
           </ThemedText>
-          <View style={styles.servicesGrid}>
-            {services.map((service, index) => (
+
+          {isLoading && (
+            <View style={styles.centerContent}>
+              <ActivityIndicator size="large" color={colors.tint} />
+              <ThemedText style={styles.centerText}>Loading services...</ThemedText>
+            </View>
+          )}
+
+          {error && (
+            <View style={styles.centerContent}>
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
               <Pressable
-                key={service.id}
-                style={({ pressed }) => [
-                  styles.serviceCard,
-                  { backgroundColor: colors.card },
-                  pressed && styles.serviceCardPressed,
-                ]}
-                onPress={() => router.push('/book-cleaner')}>
-                <View style={[styles.serviceIconContainer, { backgroundColor: `${service.gradient[0]}15` }]}>
-                  <ThemedText style={styles.iconText}>{service.icon}</ThemedText>
-                </View>
-                <View style={styles.serviceContent}>
-                  <ThemedText type="subtitle" style={styles.serviceName}>
-                    {service.name}
-                  </ThemedText>
-                  <ThemedText style={styles.serviceDescription}>{service.description}</ThemedText>
-                  
-                  <View style={styles.serviceFooter}>
-                    <View>
-                      <ThemedText style={[styles.servicePrice, { color: service.gradient[0] }]}>
-                        {service.price}
-                      </ThemedText>
-                      <ThemedText style={styles.serviceDuration}>⏱️ {service.duration}</ThemedText>
-                    </View>
-                    <View style={[styles.bookButton, { backgroundColor: service.gradient[0] }]}>
-                      <ThemedText style={styles.bookButtonText}>Book →</ThemedText>
-                    </View>
-                  </View>
-                </View>
+                style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                onPress={loadServices}>
+                <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
               </Pressable>
-            ))}
-          </View>
+            </View>
+          )}
+
+          {!isLoading && !error && (
+            <View style={styles.servicesGrid}>
+              {services.map((service) => {
+                const gradient = getServiceGradient(service.name);
+                return (
+                  <Pressable
+                    key={service.id}
+                    style={({ pressed }) => [
+                      styles.serviceCard,
+                      { backgroundColor: colors.card },
+                      pressed && styles.serviceCardPressed,
+                    ]}
+                    onPress={() => router.push('/book-cleaner')}>
+                    <View style={[styles.serviceIconContainer, { backgroundColor: `${gradient[0]}15` }]}>
+                      <ThemedText style={styles.iconText}>{getServiceIcon(service.name)}</ThemedText>
+                    </View>
+                    <View style={styles.serviceContent}>
+                      <ThemedText type="subtitle" style={styles.serviceName}>
+                        {service.name}
+                      </ThemedText>
+                      <ThemedText style={styles.serviceDescription}>{service.description}</ThemedText>
+
+                      <View style={styles.serviceFooter}>
+                        <View>
+                          <ThemedText style={[styles.servicePrice, { color: gradient[0] }]}>
+                            {formatPrice(service.price)}
+                          </ThemedText>
+                          <ThemedText style={styles.serviceDuration}>⏱️ {formatDuration(service.duration_hours)}</ThemedText>
+                        </View>
+                        <View style={[styles.bookButton, { backgroundColor: gradient[0] }]}>
+                          <ThemedText style={styles.bookButtonText}>Book →</ThemedText>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Bottom Padding */}
@@ -258,5 +311,30 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 32,
+  },
+  centerContent: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  centerText: {
+    fontSize: 16,
+    opacity: 0.6,
+  },
+  errorText: {
+    fontSize: 16,
+    opacity: 0.8,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
