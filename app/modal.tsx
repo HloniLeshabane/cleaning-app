@@ -20,7 +20,8 @@ export default function ModalScreen() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    fullName: '',
+    firstName: '',
+    lastName: '',
     phone: '',
   });
 
@@ -31,7 +32,7 @@ export default function ModalScreen() {
       return;
     }
 
-    if (!isLogin && (!formData.fullName.trim() || !formData.phone.trim())) {
+    if (!isLogin && (!formData.firstName.trim() || !formData.lastName.trim() || !formData.phone.trim())) {
       Alert.alert('Missing Information', 'Please fill in all required fields.');
       return;
     }
@@ -50,7 +51,8 @@ export default function ModalScreen() {
         await register({
           email: formData.email,
           password: formData.password,
-          fullName: formData.fullName,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           phone: formData.phone,
         });
         Alert.alert('Success', 'Account created successfully!');
@@ -87,13 +89,25 @@ export default function ModalScreen() {
           {!isLogin && (
             <>
               <View style={styles.inputGroup}>
-                <ThemedText style={styles.label}>Full Name</ThemedText>
+                <ThemedText style={styles.label}>First Name</ThemedText>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                  placeholder="Enter your full name"
+                  placeholder="Enter your first name"
                   placeholderTextColor={colors.icon}
-                  value={formData.fullName}
-                  onChangeText={(text) => setFormData({ ...formData, fullName: text })}
+                  value={formData.firstName}
+                  onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>Last Name</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                  placeholder="Enter your last name"
+                  placeholderTextColor={colors.icon}
+                  value={formData.lastName}
+                  onChangeText={(text) => setFormData({ ...formData, lastName: text })}
                   autoCapitalize="words"
                 />
               </View>

@@ -36,15 +36,15 @@ export default function ProfileScreen() {
     );
   };
 
-  const getInitials = (name?: string) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
+  const getInitials = (firstName?: string, lastName?: string) => {
+    if (firstName && lastName) {
+      return `${firstName[0]}${lastName[0]}`.toUpperCase();
+    }
+    if (firstName) return firstName[0].toUpperCase();
+    return '?';
   };
+
+  const fullName = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User' : 'Guest';
 
   const menuItems = [
     { icon: '👤', title: 'Personal Information', subtitle: 'Edit your profile details' },
@@ -64,10 +64,10 @@ export default function ProfileScreen() {
         {isAuthenticated && user ? (
           <View style={styles.header}>
             <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-              <ThemedText style={styles.avatarText}>{getInitials(user.fullName)}</ThemedText>
+              <ThemedText style={styles.avatarText}>{getInitials(user.firstName, user.lastName)}</ThemedText>
             </View>
             <ThemedText type="title" style={styles.userName}>
-              {user.fullName || 'User'}
+              {fullName}
             </ThemedText>
             <ThemedText style={styles.userEmail}>{user.email}</ThemedText>
             <ThemedText style={styles.userPhone}>{user.phone}</ThemedText>

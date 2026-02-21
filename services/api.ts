@@ -1,7 +1,10 @@
 import {
+    AssignCleanerRequest,
     AuthResponse,
     Booking,
     CreateBookingRequest,
+    FindCleanersRequest,
+    FindCleanersResponse,
     LoginRequest,
     RegisterRequest,
     Service,
@@ -14,7 +17,7 @@ import axios, { AxiosError, AxiosInstance } from 'axios';
 // For Android Emulator, use 10.0.2.2 instead of localhost
 // For iOS Simulator, use localhost
 // For physical device, use your computer's IP address (e.g., http://192.168.1.100:3000/api)
-const API_BASE_URL = 'http://10.0.2.2:3000/api';
+const API_BASE_URL = 'http://192.168.8.63:3000/api';
 const TOKEN_KEY = 'auth_token';
 
 class ApiClient {
@@ -179,6 +182,33 @@ class ApiClient {
     } catch (error: any) {
       console.error('Cancel booking error response:', error.response?.data);
       console.error('Cancel booking error status:', error.response?.status);
+      throw error;
+    }
+  }
+
+  // Cleaner matching endpoints
+  async findCleaners(data: FindCleanersRequest): Promise<FindCleanersResponse> {
+    console.log('Finding cleaners with data:', JSON.stringify(data, null, 2));
+    try {
+      const response = await this.client.post<FindCleanersResponse>('/bookings/find-cleaners', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Find cleaners error response:', error.response?.data);
+      console.error('Find cleaners error status:', error.response?.status);
+      throw error;
+    }
+  }
+
+  async assignCleaner(data: AssignCleanerRequest): Promise<Booking> {
+    console.log('Assigning cleaner:', JSON.stringify(data, null, 2));
+    try {
+      const response = await this.client.post<Booking>(`/bookings/${data.bookingId}/assign-cleaner`, {
+        cleanerId: data.cleanerId,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Assign cleaner error response:', error.response?.data);
+      console.error('Assign cleaner error status:', error.response?.status);
       throw error;
     }
   }

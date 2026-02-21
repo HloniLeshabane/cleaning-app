@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiClient } from '@/services/api';
 import { Service } from '@/types/api';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -20,12 +22,16 @@ export default function BookCleanerScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
-    date: '',
-    time: '',
+    date: new Date(),
     address: '',
     notes: '',
     serviceId: '',
+    locationLat: 0,
+    locationLng: 0,
   });
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
   useEffect(() => {
     loadServices();
@@ -55,6 +61,63 @@ export default function BookCleanerScreen() {
     }
   };
 
+  const getCurrentLocation = async () => {
+    try {
+      setIsLoadingLocation(true);
+      
+      // Request permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please enable location permissions to use your current location.');
+        return;
+      }
+
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      // Get address from coordinates
+      const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+      if (addresses.length > 0) {
+        const addr = addresses[0];
+        const fullAddress = `${addr.street || ''}, ${addr.city || ''}, ${addr.region || ''}, ${addr.postalCode || ''}`.replace(/, ,/g, ',').trim();
+        
+        setFormData((prev) => ({
+          ...prev,
+          address: fullAddress,
+          locationLat: latitude,
+          locationLng: longitude,
+        }));
+        
+        Alert.alert('Success', 'Current location retrieved successfully!');
+      }
+    } catch (err: any) {
+      console.error('Failed to get location:', err);
+      Alert.alert('Error', 'Failed to get your location. Please enter address manually.');
+    } finally {
+      setIsLoadingLocation(false);
+    }
+  };
+
+  const geocodeAddress = async (address: string) => {
+    if (!address.trim()) return;
+    
+    try {
+      const locations = await Location.geocodeAsync(address);
+      if (locations.length > 0) {
+        const { latitude, longitude } = locations[0];
+        setFormData((prev) => ({
+          ...prev,
+          locationLat: latitude,
+          locationLng: longitude,
+        }));
+      }
+    } catch (err: any) {
+      console.error('Failed to geocode address:', err);
+      // Don't show error here, will show during submission validation
+    }
+  };
+
   const handleSubmit = async () => {
     // Validation
     if (!isAuthenticated) {
@@ -65,18 +128,13 @@ export default function BookCleanerScreen() {
       return;
     }
 
-    if (!formData.date) {
-      Alert.alert('Missing Information', 'Please select a date.');
-      return;
-    }
-
-    if (!formData.time) {
-      Alert.alert('Missing Information', 'Please select a time.');
-      return;
-    }
-
     if (!formData.address.trim()) {
-      Alert.alert('Missing Information', 'Please enter your service address.');
+      Alert.alert('Missing Information', 'Please enter your service address or use current location.');
+      return;
+    }
+
+    if (formData.locationLat === 0 || formData.locationLng === 0) {
+      Alert.alert('Missing Information', 'Please use your current location or ensure address has valid coordinates.');
       return;
     }
 
@@ -88,24 +146,26 @@ export default function BookCleanerScreen() {
     try {
       setIsSubmitting(true);
 
-      // Convert date to YYYY-MM-DD format
-      const dateObj = new Date(formData.date);
-      const formattedDate = dateObj.toISOString().split('T')[0];
-
-      // Convert time from "09:00 AM" to "09:00" (24-hour format)
-      const formattedTime = convert12to24(formData.time);
-
-      await apiClient.createBooking({
+      const booking = await apiClient.createBooking({
         serviceId: formData.serviceId,
-        bookingDate: formattedDate,
-        bookingTime: formattedTime,
-        address: formData.address,
-        specialInstructions: formData.notes || undefined,
+        scheduledAt: formData.date.toISOString(),
+        locationAddress: formData.address,
+        locationLat: formData.locationLat,
+        locationLng: formData.locationLng,
+        notes: formData.notes || undefined,
       });
 
-      Alert.alert('Success', 'Booking created successfully!', [
-        { text: 'OK', onPress: () => router.push('/(tabs)/bookings') },
-      ]);
+      // Redirect to cleaner selection with booking details
+      router.push({
+        pathname: '/select-cleaner',
+        params: {
+          bookingId: booking.id,
+          serviceId: formData.serviceId,
+          locationLat: formData.locationLat.toString(),
+          locationLng: formData.locationLng.toString(),
+          scheduledAt: formData.date.toISOString(),
+        },
+      });
     } catch (err: any) {
       console.error('Failed to create booking:', err);
       console.error('Error response:', err.response?.data);
@@ -117,20 +177,53 @@ export default function BookCleanerScreen() {
     }
   };
 
-  const convert12to24 = (time12: string): string => {
-    const [time, period] = time12.split(' ');
-    let [hours, minutes] = time.split(':');
-    if (period === 'PM' && hours !== '12') {
-      hours = String(parseInt(hours, 10) + 12);
-    } else if (period === 'AM' && hours === '12') {
-      hours = '00';
-    }
-    return `${hours.padStart(2, '0')}:${minutes}`;
+  const selectedService = services.find((s) => s.id === formData.serviceId);
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-ZA', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
-  const timeSlots = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'];
+  const showDateTimePicker = () => {
+    if (Platform.OS === 'android') {
+      // First show date picker
+      DateTimePickerAndroid.open({
+        value: formData.date,
+        onChange: (event, selectedDate) => {
+          if (event.type === 'set' && selectedDate) {
+            // After date is selected, show time picker
+            DateTimePickerAndroid.open({
+              value: selectedDate,
+              onChange: (timeEvent, selectedTime) => {
+                if (timeEvent.type === 'set' && selectedTime) {
+                  setFormData({ ...formData, date: selectedTime });
+                }
+              },
+              mode: 'time',
+              is24Hour: false,
+            });
+          }
+        },
+        mode: 'date',
+        minimumDate: new Date(),
+      });
+    } else {
+      setShowDatePicker(true);
+    }
+  };
 
-  const selectedService = services.find((s) => s.id === formData.serviceId);
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setFormData({ ...formData, date: selectedDate });
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -195,60 +288,58 @@ export default function BookCleanerScreen() {
               </ScrollView>
             </View>
 
-            {/* Date Selection */}
+            {/* Date & Time Selection */}
             <View style={styles.formGroup}>
               <ThemedText type="subtitle" style={styles.label}>
-                📅 Select Date
+                📅 Select Date & Time
               </ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                placeholder="YYYY-MM-DD (e.g., 2026-02-15)"
-                placeholderTextColor={colors.icon}
-                value={formData.date}
-                onChangeText={(text) => setFormData({ ...formData, date: text })}
-              />
+              <Pressable
+                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={showDateTimePicker}>
+                <ThemedText style={{ color: colors.text }}>
+                  {formatDate(formData.date)}
+                </ThemedText>
+              </Pressable>
+              {showDatePicker && Platform.OS === 'ios' && (
+                <DateTimePicker
+                  value={formData.date}
+                  mode="datetime"
+                  display="spinner"
+                  onChange={onDateChange}
+                  minimumDate={new Date()}
+                />
+              )}
             </View>
 
-          {/* Time Selection */}
+          {/* Location */}
           <View style={styles.formGroup}>
             <ThemedText type="subtitle" style={styles.label}>
-              ⏰ Select Time
+              📍 Service Location
             </ThemedText>
-            <View style={styles.timeSlots}>
-              {timeSlots.map((slot) => (
-                <Pressable
-                  key={slot}
-                  style={({ pressed }) => [
-                    styles.timeSlot,
-                    { 
-                      backgroundColor: formData.time === slot ? colors.primary : colors.card,
-                      borderColor: formData.time === slot ? colors.primary : colors.border,
-                    },
-                    pressed && styles.timeSlotPressed,
-                  ]}
-                  onPress={() => setFormData({ ...formData, time: slot })}>
-                  <ThemedText style={[
-                    styles.timeSlotText,
-                    formData.time === slot && styles.timeSlotTextSelected,
-                  ]}>
-                    {slot}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Address */}
-          <View style={styles.formGroup}>
-            <ThemedText type="subtitle" style={styles.label}>
-              📍 Service Address
-            </ThemedText>
+            <Pressable
+              style={[
+                styles.locationButton,
+                { backgroundColor: colors.primary, borderColor: colors.primary },
+                isLoadingLocation && styles.locationButtonDisabled,
+              ]}
+              onPress={getCurrentLocation}
+              disabled={isLoadingLocation}>
+              {isLoadingLocation ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <ThemedText style={styles.locationButtonText}>
+                  📍 Use Current Location
+                </ThemedText>
+              )}
+            </Pressable>
+            <ThemedText style={[styles.orText, { color: colors.icon }]}>or enter manually</ThemedText>
             <TextInput
               style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
               placeholder="Enter your full address"
               placeholderTextColor={colors.icon}
               value={formData.address}
               onChangeText={(text) => setFormData({ ...formData, address: text })}
+              onBlur={() => geocodeAddress(formData.address)}
               multiline
               numberOfLines={3}
             />
@@ -380,34 +471,31 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  timeSlots: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  timeSlot: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+  locationButton: {
+    paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 1.5,
-    minWidth: 100,
     alignItems: 'center',
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
-  timeSlotPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.96 }],
-  },
-  timeSlotText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  timeSlotTextSelected: {
+  locationButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  locationButtonDisabled: {
+    opacity: 0.6,
+  },
+  orText: {
+    textAlign: 'center',
+    fontSize: 14,
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   bookButton: {
     paddingVertical: 18,

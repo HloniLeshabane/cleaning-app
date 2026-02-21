@@ -1,7 +1,8 @@
 export interface User {
   id: string;
   email: string;
-  fullName: string;
+  firstName?: string;
+  lastName?: string;
   phone: string;
   role: 'customer' | 'admin';
   created_at: string;
@@ -39,7 +40,8 @@ export interface AuthResponse {
 export interface RegisterRequest {
   email: string;
   password: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   phone: string;
 }
 
@@ -49,14 +51,64 @@ export interface LoginRequest {
 }
 
 export interface UpdateProfileRequest {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
 }
 
 export interface CreateBookingRequest {
   serviceId: string;
-  bookingDate: string; // YYYY-MM-DD
-  bookingTime: string; // HH:MM
-  address: string;
-  specialInstructions?: string;
+  scheduledAt: string; // ISO 8601 date string
+  locationAddress: string;
+  locationLat: number;
+  locationLng: number;
+  notes?: string;
+  asap?: boolean;
+}
+
+export interface FindCleanersRequest {
+  serviceId: string;
+  locationLat: number;
+  locationLng: number;
+  scheduledAt?: string;
+}
+
+export interface CleanerScoreBreakdown {
+  proximity: number;
+  experience: number;
+  retention: number;
+  reliability: number;
+}
+
+export interface CleanerMatch {
+  id: string;
+  distance_meters: number;
+  rating: number;
+  vehicle_type: string;
+  score: number;
+  score_breakdown: CleanerScoreBreakdown;
+  has_previous_bookings: boolean;
+  cancellation_rate: number;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  reviews_count?: number;
+}
+
+export interface FindCleanersResponse {
+  recommended: CleanerMatch[];
+  others: CleanerMatch[];
+  metadata: {
+    total_cleaners_found: number;
+    search_radius_km: number;
+    customer_location: {
+      lat: number;
+      lng: number;
+    };
+  };
+}
+
+export interface AssignCleanerRequest {
+  bookingId: string;
+  cleanerId: string;
 }
