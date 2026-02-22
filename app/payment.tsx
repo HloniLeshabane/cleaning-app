@@ -1,15 +1,16 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PaymentScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [selectedPayment, setSelectedPayment] = useState('card');
   const [tipAmount, setTipAmount] = useState(0);
@@ -18,64 +19,70 @@ export default function PaymentScreen() {
   const servicePrice = 299;
   const totalAmount = servicePrice + tipAmount;
 
+  const paymentMethods = [
+    { id: 'card', icon: '💳', label: 'Credit/Debit Card' },
+    { id: 'cash', icon: '💵', label: 'Cash on Service' },
+    { id: 'eft', icon: '🏦', label: 'EFT/Bank Transfer' },
+  ];
+
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <ThemedText style={styles.backButton}>← Back</ThemedText>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <View style={[styles.backCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <ThemedText style={[styles.backArrow, { color: colors.text }]}>←</ThemedText>
+            </View>
           </Pressable>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Payment
-          </ThemedText>
-          <ThemedText style={styles.headerSubtitle}>
-            Complete your booking
-          </ThemedText>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Payment</ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Complete your booking</ThemedText>
         </View>
 
-        {/* Service Summary */}
-        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Booking Summary</ThemedText>
-          
+        {/* Booking Summary */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Booking Summary</ThemedText>
           <View style={styles.summaryRow}>
-            <ThemedText>Standard Cleaning</ThemedText>
-            <ThemedText>R {servicePrice}</ThemedText>
+            <ThemedText style={[styles.summaryLabel, { color: colors.icon }]}>Service</ThemedText>
+            <ThemedText style={[styles.summaryValue, { color: colors.text }]}>Standard Cleaning</ThemedText>
           </View>
-          
-          <View style={styles.summaryRow}>
-            <ThemedText>Date & Time</ThemedText>
-            <ThemedText>Today, 2:00 PM</ThemedText>
+          <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+            <ThemedText style={[styles.summaryLabel, { color: colors.icon }]}>Date & Time</ThemedText>
+            <ThemedText style={[styles.summaryValue, { color: colors.text }]}>Today, 2:00 PM</ThemedText>
+          </View>
+          <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+            <ThemedText style={[styles.summaryLabel, { color: colors.icon }]}>Base price</ThemedText>
+            <ThemedText style={[styles.summaryValue, { color: colors.primary, fontWeight: '700' }]}>R {servicePrice}</ThemedText>
           </View>
         </View>
 
-        {/* Tip Section */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Add a Tip (Optional)</ThemedText>
-          <ThemedText style={styles.tipSubtitle}>Show your appreciation for great service</ThemedText>
-          
-          <View style={styles.tipOptions}>
-            {tipOptions.map((amount) => (
-              <Pressable
-                key={amount}
-                style={[
-                  styles.tipButton,
-                  { borderColor: colors.border },
-                  tipAmount === amount && { backgroundColor: colors.secondary, borderColor: colors.secondary }
-                ]}
-                onPress={() => setTipAmount(amount)}>
-                <ThemedText style={[
-                  styles.tipButtonText,
-                  tipAmount === amount && { color: '#FFFFFF' }
-                ]}>
-                  {amount === 0 ? 'No Tip' : `R ${amount}`}
-                </ThemedText>
-              </Pressable>
-            ))}
+        {/* Tip */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Add a Tip (Optional)</ThemedText>
+          <ThemedText style={[styles.cardSubtitle, { color: colors.icon }]}>Show your appreciation for great service</ThemedText>
+          <View style={styles.tipRow}>
+            {tipOptions.map((amount) => {
+              const selected = tipAmount === amount;
+              return (
+                <Pressable
+                  key={amount}
+                  style={[
+                    styles.tipBtn,
+                    {
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.primary : 'transparent',
+                    },
+                  ]}
+                  onPress={() => setTipAmount(amount)}>
+                  <ThemedText style={[styles.tipBtnText, { color: selected ? '#FFFFFF' : colors.text }]}>
+                    {amount === 0 ? 'No Tip' : `R ${amount}`}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
-
           <TextInput
-            style={[styles.customTipInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+            style={[styles.tipInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
             placeholder="Custom amount"
             placeholderTextColor={colors.icon}
             keyboardType="numeric"
@@ -84,165 +91,193 @@ export default function PaymentScreen() {
         </View>
 
         {/* Payment Method */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Payment Method</ThemedText>
-          
-          <Pressable
-            style={[
-              styles.paymentOption,
-              { borderColor: colors.border },
-              selectedPayment === 'card' && { borderColor: colors.primary, borderWidth: 2 }
-            ]}
-            onPress={() => setSelectedPayment('card')}>
-            <ThemedText style={styles.paymentIcon}>💳</ThemedText>
-            <ThemedText style={styles.paymentText}>Credit/Debit Card</ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.paymentOption,
-              { borderColor: colors.border },
-              selectedPayment === 'cash' && { borderColor: colors.primary, borderWidth: 2 }
-            ]}
-            onPress={() => setSelectedPayment('cash')}>
-            <ThemedText style={styles.paymentIcon}>💵</ThemedText>
-            <ThemedText style={styles.paymentText}>Cash on Service</ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.paymentOption,
-              { borderColor: colors.border },
-              selectedPayment === 'eft' && { borderColor: colors.primary, borderWidth: 2 }
-            ]}
-            onPress={() => setSelectedPayment('eft')}>
-            <ThemedText style={styles.paymentIcon}>🏦</ThemedText>
-            <ThemedText style={styles.paymentText}>EFT/Bank Transfer</ThemedText>
-          </Pressable>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Payment Method</ThemedText>
+          {paymentMethods.map((method) => {
+            const selected = selectedPayment === method.id;
+            return (
+              <Pressable
+                key={method.id}
+                style={[
+                  styles.paymentOption,
+                  {
+                    borderColor: selected ? colors.primary : colors.border,
+                    backgroundColor: selected ? colors.iconBg : 'transparent',
+                    borderWidth: selected ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setSelectedPayment(method.id)}>
+                <View style={[styles.paymentIconBox, { backgroundColor: selected ? colors.primary : colors.iconBg }]}>
+                  <ThemedText style={styles.paymentIconText}>{method.icon}</ThemedText>
+                </View>
+                <ThemedText style={[styles.paymentLabel, { color: colors.text }]}>{method.label}</ThemedText>
+                {selected && (
+                  <View style={[styles.checkDot, { backgroundColor: colors.primary }]}>
+                    <ThemedText style={styles.checkDotText}>✓</ThemedText>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Total */}
-        <View style={[styles.totalCard, { backgroundColor: colors.secondary }]}>
+        <View style={[styles.totalCard, { backgroundColor: colors.primary, shadowColor: colors.shadow }]}>
           <View style={styles.totalRow}>
             <ThemedText style={styles.totalLabel}>Total Amount</ThemedText>
             <ThemedText style={styles.totalAmount}>R {totalAmount}</ThemedText>
           </View>
           {tipAmount > 0 && (
-            <ThemedText style={styles.tipIncluded}>Includes R {tipAmount} tip</ThemedText>
+            <ThemedText style={styles.tipNote}>Includes R {tipAmount} tip — thank you! ❤️</ThemedText>
           )}
         </View>
 
-        {/* Confirm Button */}
+        {/* Confirm */}
         <Pressable
-          style={[styles.confirmButton, { backgroundColor: colors.primary }]}
+          style={[styles.confirmButton, { backgroundColor: colors.primary, shadowColor: colors.shadow }]}
           onPress={() => router.push('/review')}>
-          <ThemedText style={styles.confirmButtonText}>Confirm & Pay R {totalAmount}</ThemedText>
+          <ThemedText style={styles.confirmButtonText}>Confirm & Pay  R {totalAmount}</ThemedText>
         </Pressable>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   header: {
-    padding: 24,
-    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  backButton: {
-    fontSize: 18,
-    marginBottom: 20,
-    opacity: 0.7,
+  backBtn: {
+    marginBottom: 16,
+    alignSelf: 'flex-start',
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
-  },
-  summaryCard: {
-    margin: 20,
-    padding: 20,
-    borderRadius: 16,
+  backCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
   },
+  backArrow: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+  },
   card: {
-    margin: 24,
-    marginTop: 0,
-    padding: 24,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 20,
     borderRadius: 20,
-    borderWidth: 0,
-    shadowColor: '#000',
+    borderWidth: 1.5,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
+    gap: 0,
   },
-  sectionTitle: {
-    marginBottom: 12,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    marginBottom: 14,
+    marginTop: -8,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 12,
+    paddingVertical: 12,
   },
-  tipSubtitle: {
-    opacity: 0.7,
-    marginBottom: 16,
+  summaryLabel: {
+    fontSize: 14,
   },
-  tipOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 12,
-  },
-  tipButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  tipButtonText: {
+  summaryValue: {
     fontSize: 14,
     fontWeight: '600',
   },
-  customTipInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+  tipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12,
+  },
+  tipBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    minWidth: 76,
+    alignItems: 'center',
+  },
+  tipBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tipInput: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
   },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
+    gap: 12,
+  },
+  paymentIconBox: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  paymentIcon: {
-    fontSize: 24,
-    marginRight: 12,
+  paymentIconText: {
+    fontSize: 20,
   },
-  paymentText: {
-    fontSize: 16,
+  paymentLabel: {
+    flex: 1,
+    fontSize: 15,
     fontWeight: '500',
   },
+  checkDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkDotText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   totalCard: {
-    margin: 20,
-    marginTop: 0,
+    marginHorizontal: 20,
+    marginBottom: 14,
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
   totalRow: {
     flexDirection: 'row',
@@ -250,36 +285,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 16,
     fontWeight: '600',
   },
   totalAmount: {
     color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  tipIncluded: {
-    color: '#FFFFFF',
-    opacity: 0.8,
+  tipNote: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
     marginTop: 8,
   },
   confirmButton: {
-    margin: 24,
-    marginTop: 0,
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
+    marginHorizontal: 20,
     marginBottom: 40,
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    paddingVertical: 17,
+    borderRadius: 100,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 7,
   },
   confirmButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 18,
+    fontWeight: '700',
+    fontSize: 17,
   },
 });

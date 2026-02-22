@@ -1,14 +1,17 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const { width } = Dimensions.get('window');
 
 export default function TrackCleanerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
-  // Mock data for cleaner
   const cleaner = {
     name: 'Sarah Johnson',
     rating: 4.8,
@@ -18,237 +21,265 @@ export default function TrackCleanerScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Track Cleaner
-          </ThemedText>
-          <ThemedText style={styles.headerSubtitle}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Track Cleaner</ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>
             Real-time tracking of your cleaner
           </ThemedText>
         </View>
 
         {/* Map Placeholder */}
-        <View style={[styles.mapPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText style={styles.mapText}>🗺️</ThemedText>
-          <ThemedText style={styles.mapLabel}>Map View</ThemedText>
-          <ThemedText style={[styles.etaText, { color: colors.primary }]}>
-            ETA: {cleaner.eta}
-          </ThemedText>
+        <View style={[styles.mapContainer, { borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <MapView
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={{
+              latitude: -26.1076, // Default to Johannesburg area
+              longitude: 28.0567,
+              latitudeDelta: 0.0922,
+              longitudeDelta: 0.0421,
+            }}
+          >
+            {/* Customer Location */}
+            <Marker
+              coordinate={{ latitude: -26.1076, longitude: 28.0567 }}
+              title="Your Location"
+              description="123 Main St"
+              pinColor={colors.primary}
+            />
+            
+            {/* Cleaner Location (Simulated) */}
+            <Marker
+              coordinate={{ latitude: -26.1276, longitude: 28.0367 }}
+              title={cleaner.name}
+              description="On the way"
+              pinColor="#2A9D8F"
+            />
+          </MapView>
+          
+          <View style={[styles.etaOverlay, { backgroundColor: colors.card }]}>
+            <ThemedText style={[styles.etaLabel, { color: colors.icon }]}>ETA</ThemedText>
+            <ThemedText style={[styles.etaValue, { color: colors.primary }]}>{cleaner.eta}</ThemedText>
+          </View>
         </View>
 
-        {/* Cleaner Info Card */}
-        <View style={[styles.cleanerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.cleanerHeader}>
+        {/* Cleaner Card */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <View style={styles.cleanerRow}>
             <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <ThemedText style={styles.avatarText}>
-                {cleaner.name.split(' ').map(n => n[0]).join('')}
+                {cleaner.name.split(' ').map((n) => n[0]).join('')}
               </ThemedText>
             </View>
             <View style={styles.cleanerInfo}>
-              <ThemedText type="subtitle">{cleaner.name}</ThemedText>
-              <ThemedText style={styles.rating}>⭐ {cleaner.rating} rating</ThemedText>
+              <ThemedText style={[styles.cleanerName, { color: colors.text }]}>{cleaner.name}</ThemedText>
+              <ThemedText style={[styles.cleanerRating, { color: colors.icon }]}>⭐ {cleaner.rating} rating</ThemedText>
+            </View>
+            <View style={[styles.statusPill, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
+              <ThemedText style={[styles.statusPillText, { color: colors.primary }]}>{cleaner.status}</ThemedText>
             </View>
           </View>
 
-          <View style={[styles.statusBadge, { backgroundColor: colors.secondary }]}>
-            <ThemedText style={styles.statusText}>{cleaner.status}</ThemedText>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <Pressable 
-              style={[styles.actionButton, { backgroundColor: colors.secondary }]}
+          {/* Action buttons */}
+          <View style={styles.actionRow}>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: colors.iconBg, borderColor: colors.border }]}
               onPress={() => {}}>
-              <ThemedText style={styles.actionButtonText}>📞 Call</ThemedText>
+              <ThemedText style={[styles.actionButtonText, { color: colors.text }]}>📞 Call</ThemedText>
             </Pressable>
-            <Pressable 
+            <Pressable
               style={[styles.actionButton, { backgroundColor: colors.primary }]}
               onPress={() => {}}>
-              <ThemedText style={styles.actionButtonText}>💬 Message</ThemedText>
+              <ThemedText style={[styles.actionButtonText, { color: '#FFFFFF' }]}>💬 Message</ThemedText>
             </Pressable>
           </View>
         </View>
 
         {/* Service Details */}
-        <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.detailsTitle}>Service Details</ThemedText>
-          
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>📅 Date:</ThemedText>
-            <ThemedText>Today, 2:00 PM</ThemedText>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>🏠 Service:</ThemedText>
-            <ThemedText>Standard Cleaning</ThemedText>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>⏱️ Duration:</ThemedText>
-            <ThemedText>2-3 hours</ThemedText>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel}>📍 Address:</ThemedText>
-            <ThemedText style={styles.detailAddress}>123 Main St, Johannesburg</ThemedText>
-          </View>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Service Details</ThemedText>
+
+          {[
+            { label: '📅 Date', value: 'Today, 2:00 PM' },
+            { label: '🏠 Service', value: 'Standard Cleaning' },
+            { label: '⏱️ Duration', value: '2–3 hours' },
+            { label: '📍 Address', value: '123 Main St, Johannesburg' },
+          ].map((row, i) => (
+            <View key={i} style={[styles.detailRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+              <ThemedText style={[styles.detailLabel, { color: colors.icon }]}>{row.label}</ThemedText>
+              <ThemedText style={[styles.detailValue, { color: colors.text }]}>{row.value}</ThemedText>
+            </View>
+          ))}
         </View>
 
-        {/* Emergency Button */}
-        <Pressable 
-          style={[styles.emergencyButton, { backgroundColor: colors.error }]}
+        {/* Cancel */}
+        <Pressable
+          style={[styles.cancelButton, { borderColor: colors.error }]}
           onPress={() => {}}>
-          <ThemedText style={styles.emergencyButtonText}>Cancel Service</ThemedText>
+          <ThemedText style={[styles.cancelButtonText, { color: colors.error }]}>Cancel Service</ThemedText>
         </Pressable>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   header: {
-    padding: 24,
-    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 14,
   },
-  mapPlaceholder: {
-    margin: 24,
-    marginTop: 20,
-    height: 280,
-    borderRadius: 20,
-    borderWidth: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+  mapContainer: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    height: 260,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowRadius: 14,
     elevation: 5,
+    position: 'relative',
   },
-  mapText: {
-    fontSize: 64,
-    marginBottom: 12,
+  map: {
+    width: '100%',
+    height: '100%',
   },
-  mapLabel: {
-    fontSize: 16,
-    opacity: 0.6,
-  },
-  etaText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 12,
-  },
-  cleanerCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
+  etaOverlay: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 3,
   },
-  cleanerHeader: {
+  etaLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  etaValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  card: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cleanerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    gap: 12,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    flexShrink: 0,
   },
   avatarText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   cleanerInfo: {
     flex: 1,
   },
-  rating: {
-    marginTop: 4,
-    opacity: 0.7,
+  cleanerName: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 2,
   },
-  statusBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+  cleanerRating: {
+    fontSize: 13,
+  },
+  statusPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
+    borderWidth: 1,
   },
-  statusText: {
-    color: '#FFFFFF',
+  statusPillText: {
+    fontSize: 12,
     fontWeight: '600',
   },
-  actions: {
+  actionRow: {
     flexDirection: 'row',
     gap: 12,
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 13,
+    borderRadius: 100,
     alignItems: 'center',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  detailsCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 16,
     borderWidth: 1,
   },
-  detailsTitle: {
-    marginBottom: 16,
+  actionButtonText: {
+    fontWeight: '600',
+    fontSize: 15,
   },
-  detailRow: {
-    flexDirection: 'row',
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
     marginBottom: 12,
   },
-  detailLabel: {
-    width: 120,
-    opacity: 0.7,
-  },
-  detailAddress: {
-    flex: 1,
-  },
-  emergencyButton: {
-    margin: 20,
-    marginTop: 0,
-    paddingVertical: 16,
-    borderRadius: 12,
+  detailRow: {
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  emergencyButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+  detailLabel: {
+    fontSize: 14,
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'right',
+    flex: 1,
+  },
+  cancelButton: {
+    marginHorizontal: 20,
+    marginBottom: 32,
+    paddingVertical: 14,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

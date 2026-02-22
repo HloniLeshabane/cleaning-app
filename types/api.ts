@@ -4,8 +4,8 @@ export interface User {
   firstName?: string;
   lastName?: string;
   phone: string;
-  role: 'customer' | 'admin';
-  created_at: string;
+  role: 'customer' | 'cleaner' | 'admin';
+  created_at?: string;
 }
 
 export interface Service {
@@ -20,14 +20,16 @@ export interface Service {
 
 export interface Booking {
   id: string;
-  user_id: string;
+  customer_id: string;
+  cleaner_id?: string;
   service_id: string;
-  booking_date: string; // YYYY-MM-DD
-  booking_time: string; // HH:MM
-  address: string;
-  special_instructions?: string;
-  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
-  total_price: number; // in ZAR
+  scheduled_at: string; // ISO 8601
+  location_address: string;
+  location_lat?: number;
+  location_lng?: number;
+  notes?: string;
+  status: 'PENDING' | 'MATCHED' | 'ACCEPTED' | 'EN_ROUTE' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  total_amount: number; // in ZAR
   created_at: string;
   service?: Service; // populated on GET requests
 }

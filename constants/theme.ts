@@ -1,57 +1,51 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from 'react-native';
-
-// Brand colors for cleaning services app
-const primaryOrange = '#FF6B35';
-const secondaryBlue = '#2A9D8F';
-const white = '#FFFFFF';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: white,
-    tint: primaryOrange,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: primaryOrange,
-    primary: primaryOrange,
-    secondary: secondaryBlue,
-    card: white,
-    border: '#E5E5E5',
+    background: '#FCF7F0',
+    text: '#3A2C1C',
+    primary: '#FF6B00',
+    secondary: '#FF8A1F',
+    tint: '#FF6B00',
+    icon: '#B2561A',
+    tabIconDefault: '#B9814A',
+    tabIconSelected: '#FF6B00',
+    card: 'rgba(255, 255, 255, 0.9)',
+    border: '#FFD7AF',
+    iconBg: '#FFE4CC',
+    shadow: '#FF974F',
+    tabBg: 'rgba(255, 245, 235, 0.97)',
+    tabBorder: '#FFCA9A',
     success: '#4CAF50',
     warning: '#FFC107',
-    error: '#F44336',
+    error: '#E53935',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: primaryOrange,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: primaryOrange,
-    primary: primaryOrange,
-    secondary: secondaryBlue,
-    card: '#1E1E1E',
-    border: '#2C2C2C',
+    background: '#1A1108',
+    text: '#F5E8D6',
+    primary: '#FF6B00',
+    secondary: '#FF8A1F',
+    tint: '#FF6B00',
+    icon: '#C8905A',
+    tabIconDefault: '#A87050',
+    tabIconSelected: '#FF6B00',
+    card: 'rgba(50, 30, 10, 0.9)',
+    border: '#6B3D1A',
+    iconBg: '#3D1E08',
+    shadow: '#FF6B00',
+    tabBg: 'rgba(30, 15, 5, 0.97)',
+    tabBorder: '#5A2D0C',
     success: '#4CAF50',
     warning: '#FFC107',
-    error: '#F44336',
+    error: '#E53935',
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {

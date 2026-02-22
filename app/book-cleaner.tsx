@@ -1,5 +1,4 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -7,19 +6,24 @@ import { apiClient } from '@/services/api';
 import { Service } from '@/types/api';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function BookCleanerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { serviceId: preselectedServiceId } = useLocalSearchParams<{ serviceId?: string }>();
   const { isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [formData, setFormData] = useState({
     date: new Date(),
@@ -30,9 +34,6 @@ export default function BookCleanerScreen() {
     locationLng: 0,
   });
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-
   useEffect(() => {
     loadServices();
   }, []);
@@ -41,21 +42,21 @@ export default function BookCleanerScreen() {
     try {
       setIsLoading(true);
       const data = await apiClient.getServices();
-      console.log('Services API response:', data);
       if (Array.isArray(data)) {
         const activeServices = data.filter((s) => s.active);
         setServices(activeServices);
         if (activeServices.length > 0) {
-          setFormData((prev) => ({ ...prev, serviceId: activeServices[0].id }));
+          const defaultId =
+            preselectedServiceId && activeServices.some((s) => s.id === preselectedServiceId)
+              ? preselectedServiceId
+              : activeServices[0].id;
+          setFormData((prev) => ({ ...prev, serviceId: defaultId }));
         }
       } else {
-        console.error('API response is not an array:', data);
         Alert.alert('Error', 'Invalid response from server.');
       }
     } catch (err: any) {
-      console.error('Failed to load services:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to load services. Please try again.';
-      Alert.alert('Error', errorMsg);
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to load services.');
     } finally {
       setIsLoading(false);
     }
@@ -64,35 +65,21 @@ export default function BookCleanerScreen() {
   const getCurrentLocation = async () => {
     try {
       setIsLoadingLocation(true);
-      
-      // Request permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please enable location permissions to use your current location.');
+        Alert.alert('Permission Denied', 'Please enable location permissions.');
         return;
       }
-
-      // Get current position
       const location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
-
-      // Get address from coordinates
       const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (addresses.length > 0) {
         const addr = addresses[0];
         const fullAddress = `${addr.street || ''}, ${addr.city || ''}, ${addr.region || ''}, ${addr.postalCode || ''}`.replace(/, ,/g, ',').trim();
-        
-        setFormData((prev) => ({
-          ...prev,
-          address: fullAddress,
-          locationLat: latitude,
-          locationLng: longitude,
-        }));
-        
-        Alert.alert('Success', 'Current location retrieved successfully!');
+        setFormData((prev) => ({ ...prev, address: fullAddress, locationLat: latitude, locationLng: longitude }));
+        Alert.alert('Success', 'Current location retrieved!');
       }
-    } catch (err: any) {
-      console.error('Failed to get location:', err);
+    } catch {
       Alert.alert('Error', 'Failed to get your location. Please enter address manually.');
     } finally {
       setIsLoadingLocation(false);
@@ -101,25 +88,16 @@ export default function BookCleanerScreen() {
 
   const geocodeAddress = async (address: string) => {
     if (!address.trim()) return;
-    
     try {
       const locations = await Location.geocodeAsync(address);
       if (locations.length > 0) {
         const { latitude, longitude } = locations[0];
-        setFormData((prev) => ({
-          ...prev,
-          locationLat: latitude,
-          locationLng: longitude,
-        }));
+        setFormData((prev) => ({ ...prev, locationLat: latitude, locationLng: longitude }));
       }
-    } catch (err: any) {
-      console.error('Failed to geocode address:', err);
-      // Don't show error here, will show during submission validation
-    }
+    } catch { /* silently ignore */ }
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!isAuthenticated) {
       Alert.alert('Login Required', 'Please log in to book a service.', [
         { text: 'Cancel', style: 'cancel' },
@@ -127,17 +105,14 @@ export default function BookCleanerScreen() {
       ]);
       return;
     }
-
     if (!formData.address.trim()) {
       Alert.alert('Missing Information', 'Please enter your service address or use current location.');
       return;
     }
-
     if (formData.locationLat === 0 || formData.locationLng === 0) {
       Alert.alert('Missing Information', 'Please use your current location or ensure address has valid coordinates.');
       return;
     }
-
     if (!formData.serviceId) {
       Alert.alert('Missing Information', 'Please select a service.');
       return;
@@ -145,7 +120,6 @@ export default function BookCleanerScreen() {
 
     try {
       setIsSubmitting(true);
-
       const booking = await apiClient.createBooking({
         serviceId: formData.serviceId,
         scheduledAt: formData.date.toISOString(),
@@ -154,8 +128,6 @@ export default function BookCleanerScreen() {
         locationLng: formData.locationLng,
         notes: formData.notes || undefined,
       });
-
-      // Redirect to cleaner selection with booking details
       router.push({
         pathname: '/select-cleaner',
         params: {
@@ -167,37 +139,21 @@ export default function BookCleanerScreen() {
         },
       });
     } catch (err: any) {
-      console.error('Failed to create booking:', err);
-      console.error('Error response:', err.response?.data);
-      console.error('Error status:', err.response?.status);
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to create booking. Please try again.';
-      Alert.alert('Error', errorMsg);
+      Alert.alert('Error', err.response?.data?.message || err.response?.data?.error || 'Failed to create booking. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const selectedService = services.find((s) => s.id === formData.serviceId);
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-ZA', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString('en-ZA', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   const showDateTimePicker = () => {
     if (Platform.OS === 'android') {
-      // First show date picker
       DateTimePickerAndroid.open({
         value: formData.date,
         onChange: (event, selectedDate) => {
           if (event.type === 'set' && selectedDate) {
-            // After date is selected, show time picker
             DateTimePickerAndroid.open({
               value: selectedDate,
               onChange: (timeEvent, selectedTime) => {
@@ -218,87 +174,73 @@ export default function BookCleanerScreen() {
     }
   };
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
+  const onDateChange = (_event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
-    if (selectedDate) {
-      setFormData({ ...formData, date: selectedDate });
-    }
+    if (selectedDate) setFormData({ ...formData, date: selectedDate });
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButtonContainer}>
-            <ThemedText style={styles.backButton}>← Back</ThemedText>
+        <View style={[styles.header, { paddingTop: insets.top + 32 }]}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <View style={[styles.backCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <ThemedText style={[styles.backArrow, { color: colors.text }]}>←</ThemedText>
+            </View>
           </Pressable>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Book a Cleaning
-          </ThemedText>
-          <ThemedText style={styles.headerSubtitle}>
-            Book using cleaning service:
-          </ThemedText>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Book a Cleaning</ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Select your preferences below</ThemedText>
         </View>
 
-        {/* Form */}
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.tint} />
-            <ThemedText style={styles.loadingText}>Loading services...</ThemedText>
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <ThemedText style={[styles.loadingText, { color: colors.icon }]}>Loading services...</ThemedText>
           </View>
         ) : (
           <View style={styles.form}>
-            {/* Service Type Selection */}
-            <View style={styles.formGroup}>
-              <ThemedText type="subtitle" style={styles.label}>
-                🧹 Select Service
-              </ThemedText>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.serviceTypeRow}>
-                {services.map((service) => (
-                  <Pressable
-                    key={service.id}
-                    style={[
-                      styles.serviceTypeCard,
-                      { backgroundColor: formData.serviceId === service.id ? colors.primary : colors.card },
-                      { borderColor: formData.serviceId === service.id ? colors.primary : colors.border },
-                    ]}
-                    onPress={() => setFormData({ ...formData, serviceId: service.id })}>
-                    <ThemedText style={styles.serviceTypeIcon}>🧹</ThemedText>
-                    <ThemedText
+            {/* Service Selection */}
+            <View style={styles.section}>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>🧹 Select Service</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceRow}>
+                {services.map((service) => {
+                  const selected = formData.serviceId === service.id;
+                  return (
+                    <Pressable
+                      key={service.id}
                       style={[
-                        styles.serviceTypeText,
-                        { color: formData.serviceId === service.id ? '#FFFFFF' : colors.text },
-                      ]} 
-                      numberOfLines={2}>
-                      {service.name}
-                    </ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.servicePriceText,
-                        { color: formData.serviceId === service.id ? '#FFFFFF' : colors.text },
-                      ]}>
-                      R {service.price}
-                    </ThemedText>
-                  </Pressable>
-                ))}
+                        styles.serviceCard,
+                        {
+                          backgroundColor: selected ? colors.primary : colors.card,
+                          borderColor: selected ? colors.primary : colors.border,
+                          shadowColor: colors.shadow,
+                        },
+                      ]}
+                      onPress={() => setFormData({ ...formData, serviceId: service.id })}>
+                      <ThemedText style={styles.serviceIcon}>🧹</ThemedText>
+                      <ThemedText
+                        style={[styles.serviceCardName, { color: selected ? '#FFFFFF' : colors.text }]}
+                        numberOfLines={2}>
+                        {service.name}
+                      </ThemedText>
+                      <ThemedText style={[styles.serviceCardPrice, { color: selected ? '#FFE4CC' : colors.primary }]}>
+                        R {service.price}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </View>
 
-            {/* Date & Time Selection */}
-            <View style={styles.formGroup}>
-              <ThemedText type="subtitle" style={styles.label}>
-                📅 Select Date & Time
-              </ThemedText>
+            {/* Date & Time */}
+            <View style={styles.section}>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📅 Select Date & Time</ThemedText>
               <Pressable
-                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[styles.inputRow, { backgroundColor: colors.card, borderColor: colors.border }]}
                 onPress={showDateTimePicker}>
-                <ThemedText style={{ color: colors.text }}>
-                  {formatDate(formData.date)}
-                </ThemedText>
+                <ThemedText style={[styles.inputRowText, { color: colors.text }]}>{formatDate(formData.date)}</ThemedText>
+                <ThemedText style={[styles.inputRowIcon, { color: colors.primary }]}>›</ThemedText>
               </Pressable>
               {showDatePicker && Platform.OS === 'ios' && (
                 <DateTimePicker
@@ -311,222 +253,215 @@ export default function BookCleanerScreen() {
               )}
             </View>
 
-          {/* Location */}
-          <View style={styles.formGroup}>
-            <ThemedText type="subtitle" style={styles.label}>
-              📍 Service Location
-            </ThemedText>
+            {/* Location */}
+            <View style={styles.section}>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📍 Service Location</ThemedText>
+              <Pressable
+                style={[styles.locationButton, { backgroundColor: colors.primary, shadowColor: colors.shadow }, isLoadingLocation && styles.disabledBtn]}
+                onPress={getCurrentLocation}
+                disabled={isLoadingLocation}>
+                {isLoadingLocation ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.locationButtonText}>📍 Use Current Location</ThemedText>
+                )}
+              </Pressable>
+              <ThemedText style={[styles.orText, { color: colors.icon }]}>— or enter manually —</ThemedText>
+              <TextInput
+                style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                placeholder="Enter your full address"
+                placeholderTextColor={colors.icon}
+                value={formData.address}
+                onChangeText={(text) => setFormData({ ...formData, address: text })}
+                onBlur={() => geocodeAddress(formData.address)}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            {/* Notes */}
+            <View style={styles.section}>
+              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📝 Special Instructions (Optional)</ThemedText>
+              <TextInput
+                style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                placeholder="Any special requests or instructions..."
+                placeholderTextColor={colors.icon}
+                value={formData.notes}
+                onChangeText={(text) => setFormData({ ...formData, notes: text })}
+                multiline
+                numberOfLines={4}
+              />
+            </View>
+
+            {/* Submit */}
             <Pressable
-              style={[
-                styles.locationButton,
-                { backgroundColor: colors.primary, borderColor: colors.primary },
-                isLoadingLocation && styles.locationButtonDisabled,
+              style={({ pressed }) => [
+                styles.submitButton,
+                { backgroundColor: colors.primary, shadowColor: colors.shadow },
+                pressed && styles.pressedBtn,
+                isSubmitting && styles.disabledBtn,
               ]}
-              onPress={getCurrentLocation}
-              disabled={isLoadingLocation}>
-              {isLoadingLocation ? (
+              onPress={handleSubmit}
+              disabled={isSubmitting}>
+              {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <ThemedText style={styles.locationButtonText}>
-                  📍 Use Current Location
-                </ThemedText>
+                <ThemedText style={styles.submitButtonText}>Create Booking</ThemedText>
               )}
             </Pressable>
-            <ThemedText style={[styles.orText, { color: colors.icon }]}>or enter manually</ThemedText>
-            <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              placeholder="Enter your full address"
-              placeholderTextColor={colors.icon}
-              value={formData.address}
-              onChangeText={(text) => setFormData({ ...formData, address: text })}
-              onBlur={() => geocodeAddress(formData.address)}
-              multiline
-              numberOfLines={3}
-            />
           </View>
-
-          {/* Additional Notes */}
-          <View style={styles.formGroup}>
-            <ThemedText type="subtitle" style={styles.label}>
-              📝 Special Instructions (Optional)
-            </ThemedText>
-            <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              placeholder="Any special requests or instructions..."
-              placeholderTextColor={colors.icon}
-              value={formData.notes}
-              onChangeText={(text) => setFormData({ ...formData, notes: text })}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          {/* Book Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.bookButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.bookButtonPressed,
-              isSubmitting && styles.bookButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}>
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.bookButtonText}>Create Booking</ThemedText>
-            )}
-          </Pressable>
-        </View>
         )}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  backButtonContainer: {
+  backBtn: {
     marginBottom: 16,
+    alignSelf: 'flex-start',
   },
-  backButton: {
-    fontSize: 18,
-    opacity: 0.7,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
-  },
-  form: {
-    padding: 24,
-    paddingTop: 0,
-  },
-  formGroup: {
-    marginBottom: 28,
-  },
-  label: {
-    marginBottom: 12,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  serviceTypeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingRight: 12,
-  },
-  serviceTypeCard: {
-    width: 140,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 2,
+  backCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
   },
-  serviceTypeIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  serviceTypeText: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  servicePriceText: {
-    fontSize: 12,
-    opacity: 0.8,
-    textAlign: 'center',
-  },
-  input: {
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 18,
-    fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  locationButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  locationButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  locationButtonDisabled: {
-    opacity: 0.6,
-  },
-  orText: {
-    textAlign: 'center',
-    fontSize: 14,
-    marginBottom: 12,
-    fontStyle: 'italic',
-  },
-  bookButton: {
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  bookButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  bookButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  backArrow: {
     fontSize: 18,
+    fontWeight: '600',
   },
-  bookButtonDisabled: {
-    opacity: 0.6,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 6,
   },
-  loadingContainer: {
+  headerSubtitle: {
+    fontSize: 14,
+  },
+  centerContent: {
     paddingVertical: 60,
     alignItems: 'center',
     gap: 16,
   },
   loadingText: {
+    fontSize: 15,
+  },
+  form: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  section: {
+    marginBottom: 28,
+  },
+  sectionLabel: {
     fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  serviceRow: {
+    gap: 12,
+    paddingRight: 8,
+  },
+  serviceCard: {
+    width: 130,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  serviceIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  serviceCardName: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  serviceCardPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  inputRowText: {
+    flex: 1,
+    fontSize: 15,
+  },
+  inputRowIcon: {
+    fontSize: 22,
+    fontWeight: '300',
+  },
+  locationButton: {
+    paddingVertical: 15,
+    borderRadius: 100,
+    alignItems: 'center',
+    marginBottom: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  locationButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  orText: {
+    textAlign: 'center',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  textInput: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 15,
+  },
+  textArea: {
+    minHeight: 90,
+    textAlignVertical: 'top',
+  },
+  submitButton: {
+    paddingVertical: 17,
+    borderRadius: 100,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 17,
+  },
+  pressedBtn: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  disabledBtn: {
     opacity: 0.6,
   },
 });

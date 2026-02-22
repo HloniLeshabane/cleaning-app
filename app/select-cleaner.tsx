@@ -1,17 +1,18 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiClient } from '@/services/api';
 import { CleanerMatch, FindCleanersResponse } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SelectCleanerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     bookingId: string;
     serviceId: string;
@@ -39,20 +40,13 @@ export default function SelectCleanerScreen() {
         scheduledAt: params.scheduledAt,
       });
       setCleanersData(data);
-      
       if (data.recommended.length === 0 && data.others.length === 0) {
-        Alert.alert(
-          'No Cleaners Available',
-          'Unfortunately, no cleaners are available in your area at this time. Please try again later.',
-          [
-            { text: 'Go Back', onPress: () => router.back() },
-          ]
-        );
+        Alert.alert('No Cleaners Available', 'No cleaners are available in your area right now. Please try again later.', [
+          { text: 'Go Back', onPress: () => router.back() },
+        ]);
       }
     } catch (err: any) {
-      console.error('Failed to load cleaners:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to load cleaners. Please try again.';
-      Alert.alert('Error', errorMsg, [
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to load cleaners.', [
         { text: 'Go Back', onPress: () => router.back() },
       ]);
     } finally {
@@ -64,23 +58,12 @@ export default function SelectCleanerScreen() {
     try {
       setIsAssigning(true);
       setSelectedCleanerId(cleanerId);
-
-      await apiClient.assignCleaner({
-        bookingId: params.bookingId,
-        cleanerId,
-      });
-
-      Alert.alert(
-        'Success',
-        'Cleaner assigned successfully! Your booking is confirmed.',
-        [
-          { text: 'View Bookings', onPress: () => router.push('/(tabs)/bookings') },
-        ]
-      );
+      await apiClient.assignCleaner({ bookingId: params.bookingId, cleanerId });
+      Alert.alert('Booking Confirmed! 🎉', 'Your cleaner has been assigned. We\'ll notify you when they accept.', [
+        { text: 'View Bookings', onPress: () => router.push('/(tabs)/bookings') },
+      ]);
     } catch (err: any) {
-      console.error('Failed to assign cleaner:', err);
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to assign cleaner. Please try again.';
-      Alert.alert('Error', errorMsg);
+      Alert.alert('Error', err.response?.data?.message || err.response?.data?.error || 'Failed to assign cleaner.');
       setSelectedCleanerId(null);
     } finally {
       setIsAssigning(false);
@@ -88,9 +71,7 @@ export default function SelectCleanerScreen() {
   };
 
   const formatDistance = (meters: number) => `${(meters / 1000).toFixed(1)}km away`;
-  
-  const formatScore = (score: number) => `${Math.round(score)}% match`;
-  
+  const formatScore = (score: number) => `${Math.round(score)}%`;
   const formatReliability = (rate: number) => {
     if (rate === 0) return 'Perfect reliability';
     if (rate < 0.05) return 'Excellent reliability';
@@ -98,328 +79,320 @@ export default function SelectCleanerScreen() {
     return 'Fair reliability';
   };
 
-  const renderCleanerCard = (cleaner: CleanerMatch, isRecommended: boolean) => (
-    <Pressable
-      key={cleaner.id}
-      style={[
-        styles.cleanerCard,
-        { 
-          backgroundColor: colors.card,
-          borderColor: isRecommended ? colors.primary : colors.border,
-          borderWidth: isRecommended ? 2 : 1,
-        },
-        selectedCleanerId === cleaner.id && styles.selectedCard,
-      ]}
-      onPress={() => handleSelectCleaner(cleaner.id)}
-      disabled={isAssigning}>
-      
-      {isRecommended && (
-        <View style={[styles.recommendedBadge, { backgroundColor: colors.primary }]}>
-          <ThemedText style={styles.recommendedText}>⭐ Recommended</ThemedText>
-        </View>
-      )}
+  const renderCleanerCard = (cleaner: CleanerMatch, isRecommended: boolean) => {
+    const isSelected = selectedCleanerId === cleaner.id;
+    return (
+      <Pressable
+        key={cleaner.id}
+        style={[
+          styles.cleanerCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: isRecommended ? colors.primary : colors.border,
+            borderWidth: isRecommended ? 2 : 1.5,
+            shadowColor: colors.shadow,
+            opacity: isSelected ? 0.75 : 1,
+          },
+        ]}
+        onPress={() => handleSelectCleaner(cleaner.id)}
+        disabled={isAssigning}>
 
-      <View style={styles.cleanerHeader}>
-        <View style={styles.cleanerAvatar}>
-          <ThemedText style={styles.avatarText}>
-            {cleaner.firstName?.[0] || '?'}{cleaner.lastName?.[0] || ''}
-          </ThemedText>
-        </View>
-        <View style={styles.cleanerInfo}>
-          <ThemedText type="subtitle" style={styles.cleanerName}>
-            {cleaner.firstName || 'Cleaner'} {cleaner.lastName || ''}
-          </ThemedText>
-          <ThemedText style={[styles.cleanerDetail, { color: colors.icon }]}>
-            {formatDistance(cleaner.distance_meters)} • {cleaner.vehicle_type}
-          </ThemedText>
-        </View>
-        <View style={styles.scoreContainer}>
-          <ThemedText style={[styles.scoreText, { color: colors.primary }]}>
-            {formatScore(cleaner.score)}
-          </ThemedText>
-        </View>
-      </View>
-
-      <View style={styles.ratingContainer}>
-        <ThemedText style={styles.rating}>⭐ {cleaner.rating.toFixed(1)}</ThemedText>
-        {cleaner.reviews_count && (
-          <ThemedText style={[styles.reviews, { color: colors.icon }]}>
-            ({cleaner.reviews_count} reviews)
-          </ThemedText>
-        )}
-      </View>
-
-      {cleaner.has_previous_bookings && (
-        <View style={[styles.badge, { backgroundColor: colors.primary + '20' }]}>
-          <ThemedText style={[styles.badgeText, { color: colors.primary }]}>
-            ✓ Booked Before
-          </ThemedText>
-        </View>
-      )}
-
-      <ThemedText style={[styles.reliability, { color: colors.icon }]}>
-        {formatReliability(cleaner.cancellation_rate)}
-      </ThemedText>
-
-      {/* Score Breakdown */}
-      <View style={styles.scoreBreakdown}>
-        <ThemedText style={[styles.breakdownTitle, { color: colors.icon }]}>
-          Score Breakdown:
-        </ThemedText>
-        <View style={styles.breakdownBars}>
-          {Object.entries(cleaner.score_breakdown).map(([key, value]) => (
-            <View key={key} style={styles.breakdownRow}>
-              <ThemedText style={[styles.breakdownLabel, { color: colors.text }]}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}
-              </ThemedText>
-              <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { 
-                      backgroundColor: colors.primary,
-                      width: `${value}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <ThemedText style={[styles.breakdownValue, { color: colors.icon }]}>
-                {Math.round(value)}
-              </ThemedText>
+        {/* Top row: recommended badge + score badge */}
+        <View style={styles.topBadgeRow}>
+          {isRecommended ? (
+            <View style={[styles.recommendedBadge, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.recommendedText}>⭐ Recommended</ThemedText>
             </View>
-          ))}
+          ) : <View />}
+          <View style={[styles.scoreBadge, { backgroundColor: colors.iconBg }]}>
+            <ThemedText style={[styles.scoreText, { color: colors.primary }]}>{formatScore(cleaner.score)}</ThemedText>
+            <ThemedText style={[styles.scoreLabel, { color: colors.icon }]}>match</ThemedText>
+          </View>
         </View>
-      </View>
 
-      {isAssigning && selectedCleanerId === cleaner.id && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator color={colors.primary} />
+        <View style={styles.cleanerHeader}>
+          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+            <ThemedText style={styles.avatarText}>
+              {cleaner.firstName?.[0] || '?'}{cleaner.lastName?.[0] || ''}
+            </ThemedText>
+          </View>
+          <View style={styles.cleanerInfo}>
+            <ThemedText style={[styles.cleanerName, { color: colors.text }]}>
+              {cleaner.firstName || 'Cleaner'} {cleaner.lastName || ''}
+            </ThemedText>
+            <ThemedText style={[styles.cleanerDetail, { color: colors.icon }]}>
+              {formatDistance(cleaner.distance_meters)} · {cleaner.vehicle_type}
+            </ThemedText>
+          </View>
         </View>
-      )}
-    </Pressable>
-  );
+
+        <View style={styles.ratingRow}>
+          <ThemedText style={[styles.ratingText, { color: colors.text }]}>⭐ {cleaner.rating.toFixed(1)}</ThemedText>
+          {cleaner.reviews_count ? (
+            <ThemedText style={[styles.reviewsText, { color: colors.icon }]}>({cleaner.reviews_count} reviews)</ThemedText>
+          ) : null}
+        </View>
+
+        {cleaner.has_previous_bookings && (
+          <View style={[styles.booked, { backgroundColor: colors.iconBg, borderColor: colors.border }]}>
+            <ThemedText style={[styles.bookedText, { color: colors.primary }]}>✓ Booked Before</ThemedText>
+          </View>
+        )}
+
+        <ThemedText style={[styles.reliability, { color: colors.icon }]}>
+          {formatReliability(cleaner.cancellation_rate)}
+        </ThemedText>
+
+        {/* Score Breakdown */}
+        <View style={[styles.breakdownSection, { borderTopColor: colors.border }]}>
+          <ThemedText style={[styles.breakdownTitle, { color: colors.icon }]}>Score Breakdown</ThemedText>
+          <View style={styles.breakdownBars}>
+            {Object.entries(cleaner.score_breakdown).map(([key, value]) => (
+              <View key={key} style={styles.breakdownRow}>
+                <ThemedText style={[styles.breakdownLabel, { color: colors.text }]}>
+                  {key.charAt(0).toUpperCase() + key.slice(1)}
+                </ThemedText>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${value}%` as any }]} />
+                </View>
+                <ThemedText style={[styles.breakdownValue, { color: colors.icon }]}>{Math.round(value)}</ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {isAssigning && isSelected && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator color={colors.primary} size="large" />
+          </View>
+        )}
+      </Pressable>
+    );
+  };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButtonContainer}>
-            <ThemedText style={styles.backButton}>← Back</ThemedText>
+        <View style={[styles.header, { paddingTop: insets.top + 32 }]}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <View style={[styles.backCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <ThemedText style={[styles.backArrow, { color: colors.text }]}>←</ThemedText>
+            </View>
           </Pressable>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Select Your Cleaner
-          </ThemedText>
-          <ThemedText style={styles.headerSubtitle}>
-            Choose from our best-matched cleaners
-          </ThemedText>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Select Your Cleaner</ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Choose from our best-matched cleaners</ThemedText>
         </View>
 
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.tint} />
-            <ThemedText style={styles.loadingText}>Finding cleaners near you...</ThemedText>
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <ThemedText style={[styles.loadingText, { color: colors.icon }]}>Finding cleaners near you...</ThemedText>
           </View>
         ) : cleanersData ? (
           <View style={styles.content}>
-            {/* Metadata */}
             {cleanersData.metadata && (
-              <View style={[styles.metadataCard, { backgroundColor: colors.card }]}>
-                <ThemedText style={[styles.metadataText, { color: colors.icon }]}>
-                  Found {cleanersData.metadata.total_cleaners_found} cleaners within{' '}
-                  {cleanersData.metadata.search_radius_km}km
+              <View style={[styles.metaCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <ThemedText style={[styles.metaText, { color: colors.icon }]}>
+                  Found {cleanersData.metadata.total_cleaners_found} cleaners within {cleanersData.metadata.search_radius_km}km
                 </ThemedText>
               </View>
             )}
 
-            {/* Recommended Section */}
             {cleanersData.recommended.length > 0 && (
               <View style={styles.section}>
-                <ThemedText type="subtitle" style={styles.sectionTitle}>
-                  🏆 Recommended For You
-                </ThemedText>
-                {cleanersData.recommended.map((cleaner) => renderCleanerCard(cleaner, true))}
+                <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>🏆 Recommended For You</ThemedText>
+                {cleanersData.recommended.map((c) => renderCleanerCard(c, true))}
               </View>
             )}
 
-            {/* Other Cleaners Section */}
             {cleanersData.others.length > 0 && (
               <View style={styles.section}>
-                <ThemedText type="subtitle" style={styles.sectionTitle}>
-                  Other Available Cleaners
-                </ThemedText>
-                {cleanersData.others.map((cleaner) => renderCleanerCard(cleaner, false))}
+                <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Other Available Cleaners</ThemedText>
+                {cleanersData.others.map((c) => renderCleanerCard(c, false))}
               </View>
             )}
           </View>
         ) : null}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  backButtonContainer: {
+  backBtn: {
     marginBottom: 16,
+    alignSelf: 'flex-start',
   },
-  backButton: {
+  backCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  backArrow: {
     fontSize: 18,
-    opacity: 0.7,
+    fontWeight: '600',
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 14,
   },
-  loadingContainer: {
-    paddingVertical: 60,
+  centerContent: {
+    paddingVertical: 64,
     alignItems: 'center',
     gap: 16,
   },
   loadingText: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 15,
   },
   content: {
-    padding: 24,
-    paddingTop: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
-  metadataCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
+  metaCard: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 20,
+    alignItems: 'center',
   },
-  metadataText: {
-    fontSize: 14,
-    textAlign: 'center',
+  metaText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 28,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 14,
+    letterSpacing: -0.2,
   },
   cleanerCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    position: 'relative',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  selectedCard: {
-    opacity: 0.7,
+  topBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   recommendedBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
   recommendedText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   cleanerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+    gap: 12,
   },
-  cleanerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FF6B35',
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    flexShrink: 0,
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
   },
   cleanerInfo: {
     flex: 1,
   },
   cleanerName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 3,
   },
   cleanerDetail: {
-    fontSize: 14,
+    fontSize: 13,
   },
-  scoreContainer: {
-    alignItems: 'flex-end',
+  scoreBadge: {
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexShrink: 0,
   },
   scoreText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  ratingContainer: {
+  scoreLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
   },
-  rating: {
-    fontSize: 16,
+  ratingText: {
+    fontSize: 15,
     fontWeight: '600',
-    marginRight: 8,
   },
-  reviews: {
-    fontSize: 14,
+  reviewsText: {
+    fontSize: 13,
   },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  booked: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
     marginBottom: 8,
   },
-  badgeText: {
+  bookedText: {
     fontSize: 13,
     fontWeight: '600',
   },
   reliability: {
-    fontSize: 14,
+    fontSize: 13,
     marginBottom: 12,
   },
-  scoreBreakdown: {
-    marginTop: 8,
-    paddingTop: 16,
+  breakdownSection: {
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    paddingTop: 14,
   },
   breakdownTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     marginBottom: 8,
   },
   breakdownBars: {
-    gap: 8,
+    gap: 6,
   },
   breakdownRow: {
     flexDirection: 'row',
@@ -432,7 +405,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     flex: 1,
-    height: 8,
+    height: 7,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -442,7 +415,7 @@ const styles = StyleSheet.create({
   },
   breakdownValue: {
     fontSize: 12,
-    width: 30,
+    width: 28,
     textAlign: 'right',
   },
   loadingOverlay: {
@@ -451,9 +424,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 20,
   },
 });

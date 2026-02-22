@@ -1,79 +1,86 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const feedbackOptions = [
+  { icon: '✨', label: 'Quality Work' },
+  { icon: '⏰', label: 'On Time' },
+  { icon: '😊', label: 'Friendly' },
+  { icon: '💼', label: 'Professional' },
+  { icon: '🧹', label: 'Thorough' },
+  { icon: '💬', label: 'Good Communication' },
+];
+
+const ratingLabels = ['', 'Poor', 'Fair', 'Good', 'Great!', 'Excellent!'];
 
 export default function ReviewScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
+  const [selectedFeedback, setSelectedFeedback] = useState<string[]>([]);
+
+  const toggleFeedback = (label: string) => {
+    setSelectedFeedback((prev) =>
+      prev.includes(label) ? prev.filter((f) => f !== label) : [...prev, label]
+    );
+  };
 
   const handleSubmit = () => {
-    // Submit review logic here
-    alert('Thank you for your review!');
-    router.push('/(tabs)');
+    Alert.alert('Thank you! 🎉', 'Your review has been submitted.', [
+      { text: 'Done', onPress: () => router.push('/(tabs)') },
+    ]);
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Rate Your Service
-          </ThemedText>
-          <ThemedText style={styles.headerSubtitle}>
+        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Rate Your Service</ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>
             Help us improve by sharing your experience
           </ThemedText>
         </View>
 
-        {/* Cleaner Info */}
-        <View style={[styles.cleanerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {/* Cleaner Card */}
+        <View style={[styles.cleanerCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
           <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
             <ThemedText style={styles.avatarText}>SJ</ThemedText>
           </View>
-          <ThemedText type="subtitle" style={styles.cleanerName}>Sarah Johnson</ThemedText>
-          <ThemedText style={styles.serviceType}>Standard Cleaning</ThemedText>
+          <ThemedText style={[styles.cleanerName, { color: colors.text }]}>Sarah Johnson</ThemedText>
+          <ThemedText style={[styles.serviceType, { color: colors.icon }]}>Standard Cleaning</ThemedText>
         </View>
 
-        {/* Rating Section */}
-        <View style={[styles.ratingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>How was your experience?</ThemedText>
-          
-          <View style={styles.starsContainer}>
+        {/* Star Rating */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>How was your experience?</ThemedText>
+          <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <Pressable
-                key={star}
-                onPress={() => setRating(star)}
-                style={styles.starButton}>
-                <ThemedText style={styles.star}>
+              <Pressable key={star} onPress={() => setRating(star)} style={styles.starBtn}>
+                <ThemedText style={[styles.star, star <= rating && styles.starActive]}>
                   {star <= rating ? '⭐' : '☆'}
                 </ThemedText>
               </Pressable>
             ))}
           </View>
-
           {rating > 0 && (
-            <ThemedText style={[styles.ratingText, { color: colors.primary }]}>
-              {rating === 5 && 'Excellent!'}
-              {rating === 4 && 'Great!'}
-              {rating === 3 && 'Good'}
-              {rating === 2 && 'Fair'}
-              {rating === 1 && 'Poor'}
-            </ThemedText>
+            <View style={[styles.ratingBadge, { backgroundColor: colors.iconBg }]}>
+              <ThemedText style={[styles.ratingLabel, { color: colors.primary }]}>{ratingLabels[rating]}</ThemedText>
+            </View>
           )}
         </View>
 
         {/* Review Text */}
-        <View style={[styles.reviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Share your thoughts</ThemedText>
-          
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Share your thoughts</ThemedText>
           <TextInput
             style={[styles.textArea, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
             placeholder="Tell us about your experience..."
@@ -81,196 +88,204 @@ export default function ReviewScreen() {
             value={review}
             onChangeText={setReview}
             multiline
-            numberOfLines={6}
+            numberOfLines={5}
             textAlignVertical="top"
           />
         </View>
 
-        {/* Quick feedback options */}
-        <View style={[styles.feedbackCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>What did you like?</ThemedText>
-          
-          <View style={styles.feedbackOptions}>
-            {[
-              { icon: '✨', label: 'Quality Work' },
-              { icon: '⏰', label: 'On Time' },
-              { icon: '😊', label: 'Friendly' },
-              { icon: '💼', label: 'Professional' },
-              { icon: '🧹', label: 'Thorough' },
-              { icon: '💬', label: 'Good Communication' },
-            ].map((option, index) => (
-              <Pressable
-                key={index}
-                style={[styles.feedbackOption, { borderColor: colors.border }]}>
-                <ThemedText style={styles.feedbackIcon}>{option.icon}</ThemedText>
-                <ThemedText style={styles.feedbackLabel}>{option.label}</ThemedText>
-              </Pressable>
-            ))}
+        {/* Feedback Chips */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>What did you like?</ThemedText>
+          <View style={styles.chipsRow}>
+            {feedbackOptions.map((option) => {
+              const selected = selectedFeedback.includes(option.label);
+              return (
+                <Pressable
+                  key={option.label}
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.primary + '18' : 'transparent',
+                    },
+                  ]}
+                  onPress={() => toggleFeedback(option.label)}>
+                  <ThemedText style={styles.chipIcon}>{option.icon}</ThemedText>
+                  <ThemedText style={[styles.chipLabel, { color: selected ? colors.primary : colors.icon, fontWeight: selected ? '700' : '500' }]}>
+                    {option.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
-        {/* Submit Button */}
+        {/* Submit */}
         <Pressable
           style={[
             styles.submitButton,
-            { backgroundColor: rating > 0 ? colors.primary : colors.border }
+            {
+              backgroundColor: rating > 0 ? colors.primary : colors.border,
+              shadowColor: rating > 0 ? colors.shadow : 'transparent',
+            },
           ]}
           onPress={handleSubmit}
           disabled={rating === 0}>
           <ThemedText style={styles.submitButtonText}>Submit Review</ThemedText>
         </Pressable>
 
-        {/* Skip Button */}
-        <Pressable
-          style={styles.skipButton}
-          onPress={() => router.push('/(tabs)')}>
-          <ThemedText style={[styles.skipButtonText, { color: colors.icon }]}>Skip for now</ThemedText>
+        {/* Skip */}
+        <Pressable style={styles.skipButton} onPress={() => router.push('/(tabs)')}>
+          <ThemedText style={[styles.skipText, { color: colors.icon }]}>Skip for now</ThemedText>
         </Pressable>
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   header: {
-    padding: 24,
-    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 6,
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 14,
     textAlign: 'center',
   },
   cleanerCard: {
-    margin: 24,
-    padding: 28,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 24,
     borderRadius: 20,
-    borderWidth: 0,
+    borderWidth: 1.5,
     alignItems: 'center',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
   },
   cleanerName: {
+    fontSize: 18,
+    fontWeight: '700',
     marginBottom: 4,
   },
   serviceType: {
-    opacity: 0.7,
+    fontSize: 14,
   },
-  ratingCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 24,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  reviewCard: {
-    margin: 20,
-    marginTop: 0,
+  card: {
+    marginHorizontal: 20,
+    marginBottom: 14,
     padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  feedbackCard: {
-    margin: 20,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  sectionTitle: {
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 16,
   },
-  starsContainer: {
+  starsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginVertical: 16,
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
   },
-  starButton: {
-    padding: 4,
+  starBtn: {
+    padding: 6,
   },
   star: {
-    fontSize: 40,
+    fontSize: 38,
+    opacity: 0.3,
   },
-  ratingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 8,
+  starActive: {
+    opacity: 1,
+  },
+  ratingBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 100,
+  },
+  ratingLabel: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   textArea: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    minHeight: 120,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    minHeight: 110,
   },
-  feedbackOptions: {
+  chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
-  feedbackOption: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    gap: 6,
   },
-  feedbackIcon: {
-    fontSize: 16,
-    marginRight: 6,
+  chipIcon: {
+    fontSize: 15,
   },
-  feedbackLabel: {
-    fontSize: 14,
+  chipLabel: {
+    fontSize: 13,
   },
   submitButton: {
-    margin: 20,
-    marginTop: 0,
+    marginHorizontal: 20,
+    marginBottom: 10,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 100,
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
   },
   submitButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 18,
+    fontWeight: '700',
+    fontSize: 17,
   },
   skipButton: {
     alignItems: 'center',
-    paddingVertical: 16,
-    marginBottom: 40,
+    paddingVertical: 14,
+    marginBottom: 32,
   },
-  skipButtonText: {
-    fontSize: 16,
+  skipText: {
+    fontSize: 15,
   },
 });

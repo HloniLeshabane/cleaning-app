@@ -1,12 +1,13 @@
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiClient } from '@/services/api';
 import { Service } from '@/types/api';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const serviceIcons: Record<string, string> = {
   'Basic House Cleaning': '🏠',
@@ -21,23 +22,12 @@ const serviceIcons: Record<string, string> = {
   'Move-In/Out': '📦',
 };
 
-const serviceGradients: Record<string, string[]> = {
-  'Basic House Cleaning': ['#FF6B35', '#FF8C61'],
-  'Standard Clean': ['#FF6B35', '#FF8C61'],
-  'Deep Cleaning': ['#2A9D8F', '#4DBAA9'],
-  'Deep Clean': ['#2A9D8F', '#4DBAA9'],
-  'Bathroom Deep Clean': ['#2A9D8F', '#4DBAA9'],
-  'Kitchen Deep Clean': ['#2A9D8F', '#4DBAA9'],
-  'Office Cleaning': ['#264653', '#2A9D8F'],
-  'Office Clean': ['#264653', '#2A9D8F'],
-  'Move-In/Move-Out Cleaning': ['#E76F51', '#F4A261'],
-  'Move-In/Out': ['#E76F51', '#F4A261'],
-};
-
 export default function BrowseServicesScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,15 +42,12 @@ export default function BrowseServicesScreen() {
       setIsLoading(true);
       setError(null);
       const data = await apiClient.getServices();
-      console.log('Services API response:', data);
       if (Array.isArray(data)) {
         setServices(data.filter((s) => s.active));
       } else {
-        console.error('API response is not an array:', data);
         setError('Invalid response from server.');
       }
     } catch (err: any) {
-      console.error('Failed to load services:', err);
       const errorMsg = err.response?.data?.message || err.message || 'Failed to load services. Please try again.';
       setError(errorMsg);
     } finally {
@@ -70,64 +57,87 @@ export default function BrowseServicesScreen() {
 
   const formatPrice = (price: number) => `R ${price}`;
   const formatDuration = (hours: number) => {
-    if (hours === 1) return '1 hour';
-    if (hours < 1) return `${Math.round(hours * 60)} minutes`;
-    return `${hours} hours`;
+    if (hours === 1) return '1 hr';
+    if (hours < 1) return `${Math.round(hours * 60)} min`;
+    return `${hours} hrs`;
   };
 
   const getServiceIcon = (name: string) => serviceIcons[name] || '🧹';
-  const getServiceGradient = (name: string) => serviceGradients[name] || ['#6B7280', '#9CA3AF'];
+
+  const greetingText = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header with Gradient */}
-        <View style={styles.headerContainer}>
-          <View style={styles.header}>
-            <ThemedText style={styles.greeting}>Hello! 👋</ThemedText>
-            <ThemedText type="title" style={styles.headerTitle}>
-              Find Your Perfect Cleaning Service
-            </ThemedText>
-            <ThemedText style={styles.headerSubtitle}>
-              Professional cleaning at your doorstep
-            </ThemedText>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}>
+
+        {/* Header */}
+        <View style={[styles.headerContainer, { paddingTop: insets.top + 32 }]}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerTextGroup}>
+              <ThemedText style={[styles.greeting, { color: colors.icon }]}>
+                {greetingText()} 👋
+              </ThemedText>
+              <ThemedText style={[styles.userName, { color: colors.text }]}>
+                {user?.firstName ? `${user.firstName}` : 'Welcome back'}
+              </ThemedText>
+            </View>
+            {/* Avatar circle */}
+            <View style={[styles.avatarCircle, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.avatarInitial}>
+                {user?.firstName ? user.firstName[0].toUpperCase() : '?'}
+              </ThemedText>
+            </View>
+          </View>
+
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>
+            What service do you need today?
+          </ThemedText>
+        </View>
+
+        {/* Stats Pill */}
+        <View style={[styles.statsPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.statItem}>
+            <ThemedText style={[styles.statNumber, { color: colors.primary }]}>500+</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Clients</ThemedText>
+          </View>
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.statItem}>
+            <ThemedText style={[styles.statNumber, { color: colors.primary }]}>4.9★</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Rating</ThemedText>
+          </View>
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.statItem}>
+            <ThemedText style={[styles.statNumber, { color: colors.primary }]}>24/7</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Support</ThemedText>
           </View>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-            <ThemedText style={styles.statNumber}>500+</ThemedText>
-            <ThemedText style={styles.statLabel}>Happy Clients</ThemedText>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-            <ThemedText style={styles.statNumber}>4.9⭐</ThemedText>
-            <ThemedText style={styles.statLabel}>Rating</ThemedText>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-            <ThemedText style={styles.statNumber}>24/7</ThemedText>
-            <ThemedText style={styles.statLabel}>Support</ThemedText>
-          </View>
-        </View>
-
-        {/* Services Grid */}
+        {/* Services Section */}
         <View style={styles.servicesSection}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>
             Our Services
           </ThemedText>
 
           {isLoading && (
             <View style={styles.centerContent}>
-              <ActivityIndicator size="large" color={colors.tint} />
-              <ThemedText style={styles.centerText}>Loading services...</ThemedText>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <ThemedText style={[styles.centerText, { color: colors.icon }]}>Loading services...</ThemedText>
             </View>
           )}
 
           {error && (
             <View style={styles.centerContent}>
-              <ThemedText style={styles.errorText}>{error}</ThemedText>
+              <ThemedText style={[styles.errorText, { color: colors.error }]}>{error}</ThemedText>
               <Pressable
-                style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                style={[styles.retryButton, { backgroundColor: colors.primary }]}
                 onPress={loadServices}>
                 <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
               </Pressable>
@@ -136,49 +146,74 @@ export default function BrowseServicesScreen() {
 
           {!isLoading && !error && (
             <View style={styles.servicesGrid}>
-              {services.map((service) => {
-                const gradient = getServiceGradient(service.name);
-                return (
-                  <Pressable
-                    key={service.id}
-                    style={({ pressed }) => [
-                      styles.serviceCard,
-                      { backgroundColor: colors.card },
-                      pressed && styles.serviceCardPressed,
-                    ]}
-                    onPress={() => router.push('/book-cleaner')}>
-                    <View style={[styles.serviceIconContainer, { backgroundColor: `${gradient[0]}15` }]}>
-                      <ThemedText style={styles.iconText}>{getServiceIcon(service.name)}</ThemedText>
-                    </View>
-                    <View style={styles.serviceContent}>
-                      <ThemedText type="subtitle" style={styles.serviceName}>
-                        {service.name}
-                      </ThemedText>
-                      <ThemedText style={styles.serviceDescription}>{service.description}</ThemedText>
+              {services.map((service) => (
+                <Pressable
+                  key={service.id}
+                  style={({ pressed }) => [
+                    styles.serviceCard,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      shadowColor: colors.shadow,
+                      opacity: pressed ? 0.88 : 1,
+                      transform: pressed ? [{ scale: 0.975 }] : [],
+                    },
+                  ]}
+                  onPress={() => router.push({ pathname: '/book-cleaner', params: { serviceId: service.id } })}>
 
-                      <View style={styles.serviceFooter}>
-                        <View>
-                          <ThemedText style={[styles.servicePrice, { color: gradient[0] }]}>
-                            {formatPrice(service.price)}
-                          </ThemedText>
-                          <ThemedText style={styles.serviceDuration}>⏱️ {formatDuration(service.duration_hours)}</ThemedText>
-                        </View>
-                        <View style={[styles.bookButton, { backgroundColor: gradient[0] }]}>
-                          <ThemedText style={styles.bookButtonText}>Book →</ThemedText>
-                        </View>
+                  {/* Icon container */}
+                  <View style={[styles.iconWrapper, { backgroundColor: colors.iconBg }]}>
+                    <ThemedText style={styles.iconText}>{getServiceIcon(service.name)}</ThemedText>
+                  </View>
+
+                  {/* Card body */}
+                  <View style={styles.cardBody}>
+                    <ThemedText style={[styles.serviceName, { color: colors.text }]} numberOfLines={1}>
+                      {service.name}
+                    </ThemedText>
+                    <ThemedText style={[styles.serviceDesc, { color: colors.icon }]} numberOfLines={2}>
+                      {service.description}
+                    </ThemedText>
+
+                    <View style={styles.cardFooter}>
+                      <View>
+                        <ThemedText style={[styles.servicePrice, { color: colors.primary }]}>
+                          {formatPrice(service.price)}
+                        </ThemedText>
+                        <ThemedText style={[styles.serviceDuration, { color: colors.icon }]}>
+                          ⏱ {formatDuration(service.duration_hours)}
+                        </ThemedText>
+                      </View>
+                      <View style={[styles.bookButton, { backgroundColor: colors.primary }]}>
+                        <ThemedText style={styles.bookButtonText}>Book →</ThemedText>
                       </View>
                     </View>
-                  </Pressable>
-                );
-              })}
+                  </View>
+                </Pressable>
+              ))}
             </View>
           )}
         </View>
 
-        {/* Bottom Padding */}
-        <View style={styles.bottomPadding} />
+        {/* Guarantees */}
+        {!isLoading && !error && services.length > 0 && (
+          <View style={[styles.guaranteesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {[
+              { text: 'Vetted & insured cleaners' },
+              { text: 'Satisfaction guaranteed' },
+              { text: 'Easy cancellation' },
+            ].map((g, i) => (
+              <View key={i} style={styles.guaranteeRow}>
+                <View style={[styles.checkCircle, { backgroundColor: colors.iconBg }]}>
+                  <ThemedText style={[styles.checkMark, { color: colors.primary }]}>✓</ThemedText>
+                </View>
+                <ThemedText style={[styles.guaranteeText, { color: colors.text }]}>{g.text}</ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -190,127 +225,147 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 24,
-  },
-  header: {
     paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerTextGroup: {
+    flex: 1,
   },
   greeting: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 2,
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    lineHeight: 40,
+  userName: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 15,
+    marginTop: 4,
   },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    gap: 12,
-    marginBottom: 32,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+  avatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  statsPill: {
+    flexDirection: 'row',
+    marginHorizontal: 24,
+    marginBottom: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingVertical: 16,
+    shadowColor: '#FF974F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    marginVertical: 4,
   },
   statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   statLabel: {
-    fontSize: 12,
-    opacity: 0.6,
+    fontSize: 11,
+    fontWeight: '500',
   },
   servicesSection: {
     paddingHorizontal: 24,
   },
   sectionTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginBottom: 16,
+    letterSpacing: -0.3,
   },
   servicesGrid: {
     gap: 16,
   },
   serviceCard: {
-    borderRadius: 20,
-    padding: 0,
+    borderRadius: 24,
+    borderWidth: 1.5,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 14,
   },
-  serviceCardPressed: {
-    opacity: 0.8,
-    transform: [{scale: 0.98}],
-  },
-  serviceIconContainer: {
-    padding: 20,
+  iconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   iconText: {
-    fontSize: 48,
+    fontSize: 30,
   },
-  serviceContent: {
-    padding: 20,
-    paddingTop: 12,
+  cardBody: {
+    flex: 1,
   },
   serviceName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  serviceDescription: {
-    fontSize: 14,
-    opacity: 0.6,
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  serviceFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  servicePrice: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 4,
   },
+  serviceDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 10,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  servicePrice: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
   serviceDuration: {
-    fontSize: 13,
-    opacity: 0.6,
+    fontSize: 11,
+    marginTop: 1,
   },
   bookButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: 100,
   },
   bookButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  bottomPadding: {
-    height: 32,
+    fontWeight: '700',
+    fontSize: 13,
   },
   centerContent: {
     paddingVertical: 40,
@@ -318,23 +373,53 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   centerText: {
-    fontSize: 16,
-    opacity: 0.6,
+    fontSize: 15,
   },
   errorText: {
-    fontSize: 16,
-    opacity: 0.8,
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 8,
   },
   retryButton: {
     paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingHorizontal: 28,
+    borderRadius: 100,
   },
   retryButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  guaranteesCard: {
+    marginHorizontal: 24,
+    marginTop: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 12,
+    shadowColor: '#FF974F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  guaranteeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  checkCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  guaranteeText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

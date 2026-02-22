@@ -38,9 +38,6 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        // Log the actual request being sent
-        console.log('Axios Request:', config.method?.toUpperCase(), config.url);
-        console.log('Request Body:', JSON.stringify(config.data, null, 2));
         return config;
       },
       (error) => {
@@ -65,8 +62,7 @@ class ApiClient {
   async getToken(): Promise<string | null> {
     try {
       return await AsyncStorage.getItem(TOKEN_KEY);
-    } catch (error) {
-      console.error('Error getting token:', error);
+    } catch {
       return null;
     }
   }
@@ -74,52 +70,43 @@ class ApiClient {
   async setToken(token: string): Promise<void> {
     try {
       await AsyncStorage.setItem(TOKEN_KEY, token);
-    } catch (error) {
-      console.error('Error setting token:', error);
+    } catch {
+      // Silently fail — token will not persist
     }
   }
 
   async clearToken(): Promise<void> {
     try {
       await AsyncStorage.removeItem(TOKEN_KEY);
-    } catch (error) {
-      console.error('Error clearing token:', error);
+    } catch {
+      // Silently fail
     }
   }
 
   // Auth endpoints
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    console.log('Attempting registration with data:', JSON.stringify(data, null, 2));
     try {
       const response = await this.client.post<AuthResponse>('/auth/register', data);
-      console.log('Registration response:', JSON.stringify(response.data, null, 2));
       await this.setToken(response.data.token);
       return response.data;
     } catch (error: any) {
-      console.error('Registration error response:', error.response?.data);
-      console.error('Registration error status:', error.response?.status);
       throw error;
     }
   }
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    console.log('Attempting login with email:', data.email);
     try {
       const response = await this.client.post<AuthResponse>('/auth/login', data);
-      console.log('Login response:', JSON.stringify(response.data, null, 2));
       await this.setToken(response.data.token);
       return response.data;
     } catch (error: any) {
-      console.error('Login error response:', error.response?.data);
-      console.error('Login error status:', error.response?.status);
       throw error;
     }
   }
 
   async getProfile(): Promise<User> {
-    const response = await this.client.get<User>('/auth/me');
-    console.log('Profile response:', JSON.stringify(response.data, null, 2));
-    return response.data;
+    const response = await this.client.get<{ user: User }>('/auth/me');
+    return response.data.user;
   }
 
   async updateProfile(data: UpdateProfileRequest): Promise<User> {
@@ -135,7 +122,6 @@ class ApiClient {
   async getServices(): Promise<Service[]> {
     const response = await this.client.get('/services');
     const data = response.data;
-    // Handle both nested and flat response formats
     if (Array.isArray(data)) {
       return data;
     }
@@ -146,7 +132,6 @@ class ApiClient {
   async getBookings(): Promise<Booking[]> {
     const response = await this.client.get('/bookings');
     const data = response.data;
-    // Handle both nested and flat response formats
     if (Array.isArray(data)) {
       return data;
     }
@@ -156,59 +141,45 @@ class ApiClient {
   async getBooking(id: string): Promise<Booking> {
     const response = await this.client.get(`/bookings/${id}`);
     const data = response.data;
-    // Handle both nested and flat response formats
     return data.booking || data;
   }
 
   async createBooking(data: CreateBookingRequest): Promise<Booking> {
-    console.log('Creating booking with data:', JSON.stringify(data, null, 2));
     try {
       const response = await this.client.post('/bookings', data);
       const responseData = response.data;
-      // Handle both nested and flat response formats
       return responseData.booking || responseData;
     } catch (error: any) {
-      console.error('Create booking error response:', error.response?.data);
-      console.error('Create booking error status:', error.response?.status);
       throw error;
     }
   }
 
   async cancelBooking(id: string): Promise<{ message: string }> {
-    console.log('Canceling booking with ID:', id);
     try {
-      const response = await this.client.delete<{ message: string }>(`/bookings/${id}`);
+      const response = await this.client.post<{ message: string }>(`/bookings/${id}/cancel`);
       return response.data;
     } catch (error: any) {
-      console.error('Cancel booking error response:', error.response?.data);
-      console.error('Cancel booking error status:', error.response?.status);
       throw error;
     }
   }
 
   // Cleaner matching endpoints
   async findCleaners(data: FindCleanersRequest): Promise<FindCleanersResponse> {
-    console.log('Finding cleaners with data:', JSON.stringify(data, null, 2));
     try {
       const response = await this.client.post<FindCleanersResponse>('/bookings/find-cleaners', data);
       return response.data;
     } catch (error: any) {
-      console.error('Find cleaners error response:', error.response?.data);
-      console.error('Find cleaners error status:', error.response?.status);
       throw error;
     }
   }
 
   async assignCleaner(data: AssignCleanerRequest): Promise<Booking> {
-    console.log('Assigning cleaner:', JSON.stringify(data, null, 2));
     try {
       const response = await this.client.post<Booking>(`/bookings/${data.bookingId}/assign-cleaner`, {
         cleanerId: data.cleanerId,
       });
       return response.data;
     } catch (error: any) {
-      console.error('Assign cleaner error response:', error.response?.data);
-      console.error('Assign cleaner error status:', error.response?.status);
       throw error;
     }
   }

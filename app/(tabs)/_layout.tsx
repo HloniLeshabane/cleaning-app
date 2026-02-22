@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -8,79 +7,71 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-// Header logo displayed on top-level tab layout only.
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
 
   return (
-    <View style={styles.wrapper}>
-      <View style={[styles.header, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-        {/* Uses the existing app icon; replace `icon.png` with your provided logo file if desired. */}
-        <Image
-          source={require('@/assets/images/efforix-klean.png')}
-          style={styles.logo}
-          contentFit="contain"
-          accessible
-          accessibilityLabel="Efforix Klean logo"
-        />
-      </View>
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarButton: HapticTab,
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarStyle: {
+          backgroundColor: colors.tabBg,
+          borderTopColor: colors.tabBorder,
+          borderTopWidth: 1,
+          height: 72,
+          paddingBottom: 12,
+          paddingTop: 10,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 16,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 4,
+        },
+        tabBarIconStyle: {
+          marginBottom: 0,
+        },
+        tabBarIcon: ({ color, focused }) => {
+          const iconName = {
+            index: 'house.fill',
+            bookings: 'calendar',
+            track: 'location.fill',
+            profile: 'person.fill',
+          }[route.name] as any;
 
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-          headerShown: false,
-          tabBarButton: HapticTab,
-        }}>
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Browse',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="bookings"
-          options={{
-            title: 'Bookings',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="track"
-          options={{
-            title: 'Track',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="location.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: 'Profile',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-          }}
-        />
-      </Tabs>
-    </View>
+          if (focused) {
+            return (
+              <View style={styles.activeIconContainer}>
+                <IconSymbol size={22} name={iconName} color="#FFFFFF" />
+              </View>
+            );
+          }
+          return <IconSymbol size={24} name={iconName} color={color} />;
+        },
+      })}>
+      <Tabs.Screen name="index" options={{ title: 'Browse' }} />
+      <Tabs.Screen name="bookings" options={{ title: 'Bookings' }} />
+      <Tabs.Screen name="track" options={{ title: 'Track' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+    </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  header: {
-    height: 84,
+  activeIconContainer: {
+    width: 44,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FF6B00',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: 'transparent',
-  },
-  logo: {
-    maxWidth: 140,
-    height: 40,
-    alignSelf: 'center',
   },
 });
-
