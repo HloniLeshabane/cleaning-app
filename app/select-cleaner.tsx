@@ -5,7 +5,7 @@ import { apiClient } from '@/services/api';
 import { CleanerMatch, FindCleanersResponse } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SelectCleanerScreen() {
@@ -111,11 +111,19 @@ export default function SelectCleanerScreen() {
         </View>
 
         <View style={styles.cleanerHeader}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <ThemedText style={styles.avatarText}>
-              {cleaner.firstName?.[0] || '?'}{cleaner.lastName?.[0] || ''}
-            </ThemedText>
-          </View>
+          {cleaner.profilePhotoUrl ? (
+            <Image
+              source={{ uri: cleaner.profilePhotoUrl }}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.avatarText}>
+                {cleaner.firstName?.[0] || '?'}{cleaner.lastName?.[0] || ''}
+              </ThemedText>
+            </View>
+          )}
           <View style={styles.cleanerInfo}>
             <ThemedText style={[styles.cleanerName, { color: colors.text }]}>
               {cleaner.firstName || 'Cleaner'} {cleaner.lastName || ''}
@@ -320,6 +328,12 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  avatarImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     flexShrink: 0,
   },
   avatarText: {

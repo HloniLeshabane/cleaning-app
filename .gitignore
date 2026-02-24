@@ -26,6 +26,11 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# Environment variables (secrets)
+.env
+.env.local
+.env.*.local
+
 # macOS
 .DS_Store
 *.pem

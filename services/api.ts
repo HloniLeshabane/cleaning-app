@@ -13,11 +13,23 @@ import {
 } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosError, AxiosInstance } from 'axios';
+import Constants from 'expo-constants';
 
-// For Android Emulator, use 10.0.2.2 instead of localhost
-// For iOS Simulator, use localhost
-// For physical device, use your computer's IP address (e.g., http://192.168.1.100:3000/api)
-const API_BASE_URL = 'http://192.168.8.63:3000/api';
+// Dynamically resolve the backend host from the Expo dev server's IP.
+// Constants.expoConfig.hostUri is the address Expo is served from (e.g. "192.168.8.63:8081").
+// We strip the port and replace it with 3000 (your backend port).
+// Falls back to 10.0.2.2 (Android emulator alias for localhost) when no hostUri is present
+// (e.g. in a production build).
+function getApiBaseUrl(): string {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(':')[0]; // strip Expo's port
+    return `http://${host}:3000/api`;
+  }
+  return 'http://10.0.2.2:3000/api'; // Android emulator fallback
+}
+
+const API_BASE_URL = getApiBaseUrl();
 const TOKEN_KEY = 'auth_token';
 
 class ApiClient {

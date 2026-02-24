@@ -95,6 +95,7 @@ export interface CleanerMatch {
   lastName?: string;
   phone?: string;
   reviews_count?: number;
+  profilePhotoUrl?: string;
 }
 
 export interface FindCleanersResponse {

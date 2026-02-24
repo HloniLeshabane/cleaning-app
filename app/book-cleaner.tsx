@@ -1,3 +1,4 @@
+import { AddressAutocomplete } from '@/components/address-autocomplete';
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
@@ -8,7 +9,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function BookCleanerScreen() {
@@ -86,17 +87,6 @@ export default function BookCleanerScreen() {
     }
   };
 
-  const geocodeAddress = async (address: string) => {
-    if (!address.trim()) return;
-    try {
-      const locations = await Location.geocodeAsync(address);
-      if (locations.length > 0) {
-        const { latitude, longitude } = locations[0];
-        setFormData((prev) => ({ ...prev, locationLat: latitude, locationLng: longitude }));
-      }
-    } catch { /* silently ignore */ }
-  };
-
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       Alert.alert('Login Required', 'Please log in to book a service.', [
@@ -110,7 +100,7 @@ export default function BookCleanerScreen() {
       return;
     }
     if (formData.locationLat === 0 || formData.locationLng === 0) {
-      Alert.alert('Missing Information', 'Please use your current location or ensure address has valid coordinates.');
+      Alert.alert('Missing Information', 'Please select an address from the suggestions or use your current location.');
       return;
     }
     if (!formData.serviceId) {
@@ -179,140 +169,157 @@ export default function BookCleanerScreen() {
     if (selectedDate) setFormData({ ...formData, date: selectedDate });
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 32 }]}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <View style={[styles.backCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <ThemedText style={[styles.backArrow, { color: colors.text }]}>←</ThemedText>
-            </View>
-          </Pressable>
-          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Book a Cleaning</ThemedText>
-          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Select your preferences below</ThemedText>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <ThemedText style={[styles.loadingText, { color: colors.icon }]}>Loading services...</ThemedText>
+  const formContent = (
+    <>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 32 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <View style={[styles.backCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <ThemedText style={[styles.backArrow, { color: colors.text }]}>←</ThemedText>
           </View>
-        ) : (
-          <View style={styles.form}>
-            {/* Service Selection */}
-            <View style={styles.section}>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>🧹 Select Service</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceRow}>
-                {services.map((service) => {
-                  const selected = formData.serviceId === service.id;
-                  return (
-                    <Pressable
-                      key={service.id}
-                      style={[
-                        styles.serviceCard,
-                        {
-                          backgroundColor: selected ? colors.primary : colors.card,
-                          borderColor: selected ? colors.primary : colors.border,
-                          shadowColor: colors.shadow,
-                        },
-                      ]}
-                      onPress={() => setFormData({ ...formData, serviceId: service.id })}>
-                      <ThemedText style={styles.serviceIcon}>🧹</ThemedText>
-                      <ThemedText
-                        style={[styles.serviceCardName, { color: selected ? '#FFFFFF' : colors.text }]}
-                        numberOfLines={2}>
-                        {service.name}
-                      </ThemedText>
-                      <ThemedText style={[styles.serviceCardPrice, { color: selected ? '#FFE4CC' : colors.primary }]}>
-                        R {service.price}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
+        </Pressable>
+        <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Book a Cleaning</ThemedText>
+        <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Select your preferences below</ThemedText>
+      </View>
 
-            {/* Date & Time */}
-            <View style={styles.section}>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📅 Select Date & Time</ThemedText>
-              <Pressable
-                style={[styles.inputRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={showDateTimePicker}>
-                <ThemedText style={[styles.inputRowText, { color: colors.text }]}>{formatDate(formData.date)}</ThemedText>
-                <ThemedText style={[styles.inputRowIcon, { color: colors.primary }]}>›</ThemedText>
-              </Pressable>
-              {showDatePicker && Platform.OS === 'ios' && (
-                <DateTimePicker
-                  value={formData.date}
-                  mode="datetime"
-                  display="spinner"
-                  onChange={onDateChange}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+      {isLoading ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <ThemedText style={[styles.loadingText, { color: colors.icon }]}>Loading services...</ThemedText>
+        </View>
+      ) : (
+        <View style={styles.form}>
+          {/* Service Selection */}
+          <View style={styles.section}>
+            <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>🧹 Select Service</ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceRow}>
+              {services.map((service) => {
+                const selected = formData.serviceId === service.id;
+                return (
+                  <Pressable
+                    key={service.id}
+                    style={[
+                      styles.serviceCard,
+                      {
+                        backgroundColor: selected ? colors.primary : colors.card,
+                        borderColor: selected ? colors.primary : colors.border,
+                        shadowColor: colors.shadow,
+                      },
+                    ]}
+                    onPress={() => setFormData({ ...formData, serviceId: service.id })}>
+                    <ThemedText style={styles.serviceIcon}>🧹</ThemedText>
+                    <ThemedText
+                      style={[styles.serviceCardName, { color: selected ? '#FFFFFF' : colors.text }]}
+                      numberOfLines={2}>
+                      {service.name}
+                    </ThemedText>
+                    <ThemedText style={[styles.serviceCardPrice, { color: selected ? '#FFE4CC' : colors.primary }]}>
+                      R {service.price}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-            {/* Location */}
-            <View style={styles.section}>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📍 Service Location</ThemedText>
-              <Pressable
-                style={[styles.locationButton, { backgroundColor: colors.primary, shadowColor: colors.shadow }, isLoadingLocation && styles.disabledBtn]}
-                onPress={getCurrentLocation}
-                disabled={isLoadingLocation}>
-                {isLoadingLocation ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.locationButtonText}>📍 Use Current Location</ThemedText>
-                )}
-              </Pressable>
-              <ThemedText style={[styles.orText, { color: colors.icon }]}>— or enter manually —</ThemedText>
-              <TextInput
-                style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                placeholder="Enter your full address"
-                placeholderTextColor={colors.icon}
-                value={formData.address}
-                onChangeText={(text) => setFormData({ ...formData, address: text })}
-                onBlur={() => geocodeAddress(formData.address)}
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            {/* Notes */}
-            <View style={styles.section}>
-              <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📝 Special Instructions (Optional)</ThemedText>
-              <TextInput
-                style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                placeholder="Any special requests or instructions..."
-                placeholderTextColor={colors.icon}
-                value={formData.notes}
-                onChangeText={(text) => setFormData({ ...formData, notes: text })}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-
-            {/* Submit */}
+          {/* Date & Time */}
+          <View style={styles.section}>
+            <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📅 Select Date & Time</ThemedText>
             <Pressable
-              style={({ pressed }) => [
-                styles.submitButton,
-                { backgroundColor: colors.primary, shadowColor: colors.shadow },
-                pressed && styles.pressedBtn,
-                isSubmitting && styles.disabledBtn,
-              ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting}>
-              {isSubmitting ? (
+              style={[styles.inputRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={showDateTimePicker}>
+              <ThemedText style={[styles.inputRowText, { color: colors.text }]}>{formatDate(formData.date)}</ThemedText>
+              <ThemedText style={[styles.inputRowIcon, { color: colors.primary }]}>›</ThemedText>
+            </Pressable>
+            {showDatePicker && Platform.OS === 'ios' && (
+              <DateTimePicker
+                value={formData.date}
+                mode="datetime"
+                display="spinner"
+                onChange={onDateChange}
+                minimumDate={new Date()}
+              />
+            )}
+          </View>
+
+          {/* Location */}
+          <View style={styles.section}>
+            <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📍 Service Location</ThemedText>
+            <Pressable
+              style={[styles.locationButton, { backgroundColor: colors.primary, shadowColor: colors.shadow }, isLoadingLocation && styles.disabledBtn]}
+              onPress={getCurrentLocation}
+              disabled={isLoadingLocation}>
+              {isLoadingLocation ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <ThemedText style={styles.submitButtonText}>Create Booking</ThemedText>
+                <ThemedText style={styles.locationButtonText}>📍 Use Current Location</ThemedText>
               )}
             </Pressable>
+            <ThemedText style={[styles.orText, { color: colors.icon }]}>— or search manually —</ThemedText>
+            <AddressAutocomplete
+              value={formData.address}
+              onSelect={(address, lat, lng) =>
+                setFormData((prev) => ({ ...prev, address, locationLat: lat, locationLng: lng }))
+              }
+              onClear={() =>
+                setFormData((prev) => ({ ...prev, address: '', locationLat: 0, locationLng: 0 }))
+              }
+            />
           </View>
-        )}
-      </ScrollView>
-    </View>
+
+          {/* Notes */}
+          <View style={styles.section}>
+            <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>📝 Special Instructions (Optional)</ThemedText>
+            <TextInput
+              style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              placeholder="Any special requests or instructions..."
+              placeholderTextColor={colors.icon}
+              value={formData.notes}
+              onChangeText={(text) => setFormData({ ...formData, notes: text })}
+              multiline
+              numberOfLines={4}
+            />
+          </View>
+
+          {/* Submit */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.submitButton,
+              { backgroundColor: colors.primary, shadowColor: colors.shadow },
+              pressed && styles.pressedBtn,
+              isSubmitting && styles.disabledBtn,
+            ]}
+            onPress={handleSubmit}
+            disabled={isSubmitting}>
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.submitButtonText}>Create Booking</ThemedText>
+            )}
+          </Pressable>
+        </View>
+      )}
+    </>
+  );
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+      {/* FlatList instead of ScrollView to avoid nested VirtualizedList warning
+          from GooglePlacesAutocomplete's internal FlatList */}
+      <FlatList
+        style={styles.scrollView}
+        data={[]}
+        renderItem={null}
+        keyExtractor={() => 'unused'}
+        ListHeaderComponent={formContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      />
+    </KeyboardAvoidingView>
   );
 }
 
