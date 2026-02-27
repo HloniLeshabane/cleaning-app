@@ -2,12 +2,14 @@ import {
     AssignCleanerRequest,
     AuthResponse,
     Booking,
+    CleanerTrackingInfo,
     CreateBookingRequest,
     FindCleanersRequest,
     FindCleanersResponse,
     LoginRequest,
     RegisterRequest,
     Service,
+    UpdateBookingRequest,
     UpdateProfileRequest,
     User,
 } from '@/types/api';
@@ -15,16 +17,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import Constants from 'expo-constants';
 
-// Dynamically resolve the backend host from the Expo dev server's IP.
-// Constants.expoConfig.hostUri is the address Expo is served from (e.g. "192.168.8.63:8081").
-// We strip the port and replace it with 3000 (your backend port).
-// Falls back to 10.0.2.2 (Android emulator alias for localhost) when no hostUri is present
-// (e.g. in a production build).
+// Dynamically resolve the backend URL:
+// 1. In dev (Expo Go), derive from hostUri so any machine's IP works automatically.
+// 2. In EAS / production builds, use the EXPO_PUBLIC_API_URL env variable.
+// 3. Last resort: Android emulator alias (10.0.2.2) for local emulator testing.
 function getApiBaseUrl(): string {
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const host = hostUri.split(':')[0]; // strip Expo's port
     return `http://${host}:3000/api`;
+  }
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
   }
   return 'http://10.0.2.2:3000/api'; // Android emulator fallback
 }
@@ -194,6 +198,20 @@ class ApiClient {
     } catch (error: any) {
       throw error;
     }
+  }
+
+  async getBookingTracking(bookingId: string): Promise<CleanerTrackingInfo> {
+    const response = await this.client.get<CleanerTrackingInfo>(`/bookings/${bookingId}/tracking`);
+    return response.data;
+  }
+
+  async updateBooking(id: string, data: UpdateBookingRequest): Promise<Booking> {
+    const response = await this.client.patch<Booking>(`/bookings/${id}`, data);
+    return response.data;
+  }
+
+  async registerPushToken(token: string): Promise<void> {
+    await this.client.post('/notifications/push-token', { token });
   }
 }
 

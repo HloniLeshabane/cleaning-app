@@ -115,3 +115,27 @@ export interface AssignCleanerRequest {
   bookingId: string;
   cleanerId: string;
 }
+
+export interface UpdateBookingRequest {
+  scheduledAt?: string;
+  notes?: string;
+}
+
+export interface CleanerTrackingInfo {
+  booking_id: string;
+  status: Booking['status'];
+  destination: { lat: number; lng: number; address: string };
+  cleaner: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+  };
+  location: {
+    lat: number;
+    lng: number;
+    heading: number | null;
+    speed: number | null;
+    last_updated: string;
+  } | null;
+}

@@ -1,126 +1,265 @@
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { apiClient } from '@/services/api';
+import { getSupabaseClient, hasSupabaseConfig } from '@/services/supabase';
+import { Booking, CleanerTrackingInfo } from '@/types/api';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+const ACTIVE_STATUSES: Booking['status'][] = ['EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'];
+
+const STATUS_LABEL: Partial<Record<Booking['status'], string>> = {
+  EN_ROUTE: 'Cleaner En Route',
+  ARRIVED: 'Cleaner Has Arrived',
+  IN_PROGRESS: 'Cleaning In Progress',
+};
+
+const STATUS_COLOR: Partial<Record<Booking['status'], string>> = {
+  EN_ROUTE: '#0ea5e9',
+  ARRIVED: '#8b5cf6',
+  IN_PROGRESS: '#f59e0b',
+};
 
 export default function TrackCleanerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
 
-  const cleaner = {
-    name: 'Sarah Johnson',
-    rating: 4.8,
-    phone: '+27 12 345 6789',
-    eta: '15 minutes',
-    status: 'On the way',
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [tracking, setTracking] = useState<CleanerTrackingInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const activeBooking = bookings.find((b) => ACTIVE_STATUSES.includes(b.status)) ?? null;
+
+  const fetchTracking = useCallback(async (bookingId: string) => {
+    try {
+      const info = await apiClient.getBookingTracking(bookingId);
+      setTracking(info);
+    } catch {
+      // Tracking fetch failed — keep previous data
+    }
+  }, []);
+
+  const loadBookings = useCallback(async () => {
+    try {
+      const data = await apiClient.getBookings();
+      setBookings(data);
+    } catch {
+      Alert.alert('Error', 'Could not load bookings.');
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await loadBookings();
+      setLoading(false);
+    })();
+  }, [loadBookings]);
+
+  // When active booking changes — set up Supabase Broadcast + 5s polling for EN_ROUTE
+  useEffect(() => {
+    // Tear down previous subscription/polling
+    if (channelRef.current) {
+      getSupabaseClient()?.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    if (!activeBooking) {
+      setTracking(null);
+      return;
+    }
+
+    // Initial tracking fetch
+    fetchTracking(activeBooking.id);
+
+    // Supabase Broadcast subscription (instant updates)
+    if (hasSupabaseConfig()) {
+      const sb = getSupabaseClient();
+      if (sb) {
+        const channel = sb.channel(`job-tracking:${activeBooking.id}`, {
+          config: { broadcast: { ack: false } },
+        });
+        channel.on('broadcast', { event: 'location' }, ({ payload }) => {
+          setTracking((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  location: {
+                    lat: payload.lat,
+                    lng: payload.lng,
+                    heading: payload.heading ?? null,
+                    speed: payload.speed ?? null,
+                    last_updated: payload.timestamp ?? new Date().toISOString(),
+                  },
+                }
+              : prev
+          );
+        });
+        channel.subscribe();
+        channelRef.current = channel;
+      }
+    }
+
+    // 5s polling fallback (runs while EN_ROUTE)
+    if (activeBooking.status === 'EN_ROUTE') {
+      pollTimerRef.current = setInterval(() => fetchTracking(activeBooking.id), 5000);
+    }
+
+    return () => {
+      if (channelRef.current) {
+        getSupabaseClient()?.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBooking?.id, activeBooking?.status]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadBookings();
+    if (activeBooking) await fetchTracking(activeBooking.id);
+    setRefreshing(false);
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.emptyWrap, { paddingTop: insets.top + 60 }]}>
+          <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>Loading…</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
+  if (!activeBooking) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ScrollView
+          contentContainerStyle={[styles.emptyWrap, { paddingTop: insets.top + 60 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}>
+          <ThemedText style={styles.emptyIcon}>🧹</ThemedText>
+          <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>No Active Booking</ThemedText>
+          <ThemedText style={[styles.emptySub, { color: colors.icon }]}>
+            When your cleaner is on the way, you'll be able to track them here in real time.
+          </ThemedText>
+          <Pressable style={[styles.ghostBtn, { backgroundColor: colors.primary }]} onPress={onRefresh}>
+            <ThemedText style={styles.ghostBtnText}>Check Again</ThemedText>
+          </Pressable>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const chipColor = STATUS_COLOR[activeBooking.status] ?? colors.primary;
+
+  const mapRegion = tracking?.location
+    ? { latitude: tracking.location.lat, longitude: tracking.location.lng, latitudeDelta: 0.025, longitudeDelta: 0.025 }
+    : tracking?.destination
+    ? { latitude: tracking.destination.lat, longitude: tracking.destination.lng, latitudeDelta: 0.06, longitudeDelta: 0.06 }
+    : { latitude: -26.1076, longitude: 28.0567, latitudeDelta: 0.06, longitudeDelta: 0.06 };
+
+  const cleanerInitials = `${tracking?.cleaner.first_name?.[0] ?? '?'}${tracking?.cleaner.last_name?.[0] ?? ''}`.toUpperCase();
+  const cleanerName = tracking
+    ? `${tracking.cleaner.first_name ?? ''} ${tracking.cleaner.last_name ?? ''}`.trim()
+    : 'Your Cleaner';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}>
+
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Track Cleaner</ThemedText>
-          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>
-            Real-time tracking of your cleaner
-          </ThemedText>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.icon }]}>Real-time tracking</ThemedText>
         </View>
 
-        {/* Map Placeholder */}
-        <View style={[styles.mapContainer, { borderColor: colors.border, shadowColor: colors.shadow }]}>
-          <MapView
-            style={styles.map}
-            provider={PROVIDER_GOOGLE}
-            initialRegion={{
-              latitude: -26.1076, // Default to Johannesburg area
-              longitude: 28.0567,
-              latitudeDelta: 0.0922,
-              longitudeDelta: 0.0421,
-            }}
-          >
-            {/* Customer Location */}
-            <Marker
-              coordinate={{ latitude: -26.1076, longitude: 28.0567 }}
-              title="Your Location"
-              description="123 Main St"
-              pinColor={colors.primary}
-            />
-            
-            {/* Cleaner Location (Simulated) */}
-            <Marker
-              coordinate={{ latitude: -26.1276, longitude: 28.0367 }}
-              title={cleaner.name}
-              description="On the way"
-              pinColor="#2A9D8F"
-            />
+        {/* Map */}
+        <View style={[styles.mapContainer, { borderColor: colors.border }]}>
+          <MapView style={styles.map} provider={PROVIDER_GOOGLE} region={mapRegion}>
+            {tracking?.destination && (
+              <Marker
+                coordinate={{ latitude: tracking.destination.lat, longitude: tracking.destination.lng }}
+                title="Your Location"
+                description={tracking.destination.address}
+                pinColor={colors.primary}
+              />
+            )}
+            {tracking?.location && (
+              <Marker
+                coordinate={{ latitude: tracking.location.lat, longitude: tracking.location.lng }}
+                title={cleanerName}
+                description="Your cleaner"
+                pinColor="#2A9D8F"
+              />
+            )}
           </MapView>
-          
-          <View style={[styles.etaOverlay, { backgroundColor: colors.card }]}>
-            <ThemedText style={[styles.etaLabel, { color: colors.icon }]}>ETA</ThemedText>
-            <ThemedText style={[styles.etaValue, { color: colors.primary }]}>{cleaner.eta}</ThemedText>
+          <View style={styles.mapTopRow}>
+            <View style={[styles.statusChip, { backgroundColor: chipColor }]}>
+              <ThemedText style={styles.chipText}>{STATUS_LABEL[activeBooking.status] ?? activeBooking.status}</ThemedText>
+            </View>
           </View>
         </View>
 
-        {/* Cleaner Card */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
+        {/* Cleaner card */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cleanerRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-              <ThemedText style={styles.avatarText}>
-                {cleaner.name.split(' ').map((n) => n[0]).join('')}
-              </ThemedText>
+            <View style={[styles.avatar, { backgroundColor: chipColor }]}>
+              <ThemedText style={styles.avatarText}>{cleanerInitials}</ThemedText>
             </View>
             <View style={styles.cleanerInfo}>
-              <ThemedText style={[styles.cleanerName, { color: colors.text }]}>{cleaner.name}</ThemedText>
-              <ThemedText style={[styles.cleanerRating, { color: colors.icon }]}>⭐ {cleaner.rating} rating</ThemedText>
+              <ThemedText style={[styles.cleanerName, { color: colors.text }]}>{cleanerName}</ThemedText>
+              <ThemedText style={[styles.cleanerSub, { color: colors.icon }]}>
+                {tracking?.location
+                  ? `Updated ${new Date(tracking.location.last_updated).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Location pending…'}
+              </ThemedText>
             </View>
-            <View style={[styles.statusPill, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
-              <ThemedText style={[styles.statusPillText, { color: colors.primary }]}>{cleaner.status}</ThemedText>
+            <View style={[styles.statusBadge, { backgroundColor: chipColor + '22', borderColor: chipColor }]}>
+              <ThemedText style={[styles.statusBadgeText, { color: chipColor }]}>
+                {activeBooking.status.replace('_', ' ')}
+              </ThemedText>
             </View>
           </View>
-
-          {/* Action buttons */}
-          <View style={styles.actionRow}>
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: colors.iconBg, borderColor: colors.border }]}
-              onPress={() => {}}>
-              <ThemedText style={[styles.actionButtonText, { color: colors.text }]}>📞 Call</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: colors.primary }]}
-              onPress={() => {}}>
-              <ThemedText style={[styles.actionButtonText, { color: '#FFFFFF' }]}>💬 Message</ThemedText>
-            </Pressable>
+          <View style={[styles.divider, { borderColor: colors.border }]} />
+          <View style={styles.detailGrid}>
+            <View style={styles.detailItem}>
+              <ThemedText style={[styles.detailLabel, { color: colors.icon }]}>Service</ThemedText>
+              <ThemedText style={[styles.detailValue, { color: colors.text }]}>{activeBooking.service?.name ?? '—'}</ThemedText>
+            </View>
+            <View style={styles.detailItem}>
+              <ThemedText style={[styles.detailLabel, { color: colors.icon }]}>Amount</ThemedText>
+              <ThemedText style={[styles.detailValue, { color: colors.primary }]}>
+                R {Number(activeBooking.total_amount ?? 0).toFixed(2)}
+              </ThemedText>
+            </View>
+            <View style={styles.detailItem}>
+              <ThemedText style={[styles.detailLabel, { color: colors.icon }]}>Time</ThemedText>
+              <ThemedText style={[styles.detailValue, { color: colors.text }]}>
+                {new Date(activeBooking.scheduled_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </ThemedText>
+            </View>
           </View>
         </View>
 
-        {/* Service Details */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]}>
-          <ThemedText style={[styles.cardTitle, { color: colors.text }]}>Service Details</ThemedText>
-
-          {[
-            { label: '📅 Date', value: 'Today, 2:00 PM' },
-            { label: '🏠 Service', value: 'Standard Cleaning' },
-            { label: '⏱️ Duration', value: '2–3 hours' },
-            { label: '📍 Address', value: '123 Main St, Johannesburg' },
-          ].map((row, i) => (
-            <View key={i} style={[styles.detailRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
-              <ThemedText style={[styles.detailLabel, { color: colors.icon }]}>{row.label}</ThemedText>
-              <ThemedText style={[styles.detailValue, { color: colors.text }]}>{row.value}</ThemedText>
-            </View>
-          ))}
-        </View>
-
-        {/* Cancel */}
-        <Pressable
-          style={[styles.cancelButton, { borderColor: colors.error }]}
-          onPress={() => {}}>
-          <ThemedText style={[styles.cancelButtonText, { color: colors.error }]}>Cancel Service</ThemedText>
-        </Pressable>
+        <View style={{ height: 32 }} />
       </ScrollView>
     </View>
   );
@@ -128,158 +267,35 @@ export default function TrackCleanerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollView: { flex: 1 },
-  header: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 30,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    marginBottom: 6,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-  },
+  emptyWrap: { alignItems: 'center', paddingHorizontal: 40, paddingBottom: 40 },
+  emptyIcon: { fontSize: 54, marginBottom: 16 },
+  emptyTitle: { fontSize: 22, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 },
+  ghostBtn: { paddingVertical: 13, paddingHorizontal: 32, borderRadius: 100 },
+  ghostBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  header: { paddingHorizontal: 24, paddingBottom: 12 },
+  headerTitle: { fontSize: 28, fontWeight: '700', letterSpacing: -0.4, marginBottom: 4 },
+  headerSubtitle: { fontSize: 14 },
   mapContainer: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-    height: 260,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 5,
-    position: 'relative',
+    marginHorizontal: 20, marginBottom: 14, height: 270,
+    borderRadius: 24, borderWidth: 1.5, overflow: 'hidden', position: 'relative',
   },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  etaOverlay: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  etaLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  etaValue: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  card: {
-    marginHorizontal: 20,
-    marginBottom: 14,
-    padding: 18,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  cleanerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  cleanerInfo: {
-    flex: 1,
-  },
-  cleanerName: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  cleanerRating: {
-    fontSize: 13,
-  },
-  statusPill: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  statusPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 100,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  actionButtonText: {
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  detailRow: {
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  detailLabel: {
-    fontSize: 14,
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'right',
-    flex: 1,
-  },
-  cancelButton: {
-    marginHorizontal: 20,
-    marginBottom: 32,
-    paddingVertical: 14,
-    borderRadius: 100,
-    borderWidth: 1.5,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontWeight: '700',
-    fontSize: 15,
-  },
+  map: { width: '100%', height: '100%' },
+  mapTopRow: { position: 'absolute', top: 14, left: 14 },
+  statusChip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 100 },
+  chipText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  card: { marginHorizontal: 20, marginBottom: 14, borderRadius: 20, borderWidth: 1.5, padding: 18 },
+  cleanerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  cleanerInfo: { flex: 1 },
+  cleanerName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  cleanerSub: { fontSize: 12 },
+  statusBadge: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100, borderWidth: 1 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  divider: { borderBottomWidth: 1, marginVertical: 14 },
+  detailGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+  detailItem: { flex: 1 },
+  detailLabel: { fontSize: 11, letterSpacing: 0.4, marginBottom: 3, textTransform: 'uppercase' },
+  detailValue: { fontSize: 14, fontWeight: '600' },
 });

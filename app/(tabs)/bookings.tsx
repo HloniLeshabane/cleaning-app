@@ -4,9 +4,10 @@ import { useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiClient } from '@/services/api';
 import { Booking } from '@/types/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const statusColors: Record<string, string> = {
@@ -42,6 +43,13 @@ export default function BookingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Edit modal state
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  const [editDate, setEditDate] = useState(new Date());
+  const [editNotes, setEditNotes] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadBookings();
@@ -65,6 +73,29 @@ export default function BookingsScreen() {
       setError(errorMsg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const openEditModal = (booking: Booking) => {
+    setEditBooking(booking);
+    setEditDate(new Date(booking.scheduled_at));
+    setEditNotes(booking.notes ?? '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editBooking) return;
+    setIsSaving(true);
+    try {
+      await apiClient.updateBooking(editBooking.id, {
+        scheduledAt: editDate.toISOString(),
+        notes: editNotes,
+      });
+      setEditBooking(null);
+      await loadBookings();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.error || 'Failed to save changes.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -163,7 +194,10 @@ export default function BookingsScreen() {
         {isAuthenticated && !isLoading && !error && bookings.length > 0 && (
           <View style={styles.bookingsList}>
             {bookings.map((booking) => {
-              const statusColor = statusColors[booking.status] || '#9E9E9E';
+              // When a cleaner has been offered the job but hasn't accepted yet
+              const offerSent = booking.status === 'PENDING' && !!booking.cleaner_id;
+              const statusColor = offerSent ? '#f59e0b' : (statusColors[booking.status] || '#9E9E9E');
+              const statusLabel = offerSent ? 'Offer Sent' : (statusLabels[booking.status] || booking.status);
               return (
                 <View
                   key={booking.id}
@@ -180,7 +214,7 @@ export default function BookingsScreen() {
                     </ThemedText>
                     <View style={[styles.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
                       <ThemedText style={[styles.statusText, { color: statusColor }]}>
-                        {statusLabels[booking.status]}
+                        {statusLabel}
                       </ThemedText>
                     </View>
                   </View>
@@ -214,7 +248,7 @@ export default function BookingsScreen() {
                   </View>
 
                   {/* Track button */}
-                  {booking.status === 'IN_PROGRESS' && (
+                  {['EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(booking.status) && (
                     <Pressable
                       style={[styles.actionButton, { backgroundColor: colors.primary }]}
                       onPress={() => router.push('/(tabs)/track')}>
@@ -222,8 +256,17 @@ export default function BookingsScreen() {
                     </Pressable>
                   )}
 
+                  {/* Edit — only while PENDING and no cleaner assigned yet */}
+                  {booking.status === 'PENDING' && !booking.cleaner_id && (
+                    <Pressable
+                      style={[styles.outlineButton, { borderColor: colors.primary }]}
+                      onPress={() => openEditModal(booking)}>
+                      <ThemedText style={[styles.outlineButtonText, { color: colors.primary }]}>✏️ Edit Booking</ThemedText>
+                    </Pressable>
+                  )}
+
                   {/* Cancel */}
-                  {['PENDING', 'MATCHED'].includes(booking.status) && (
+                  {['PENDING', 'MATCHED', 'ACCEPTED'].includes(booking.status) && (
                     <Pressable
                       style={[styles.outlineButton, { borderColor: colors.error }]}
                       onPress={() => handleCancelBooking(booking.id)}>
@@ -252,6 +295,67 @@ export default function BookingsScreen() {
           <ThemedText style={styles.newBookingButtonText}>+ Book New Service</ThemedText>
         </Pressable>
       </ScrollView>
+
+      {/* Edit Booking Modal */}
+      <Modal visible={!!editBooking} transparent animationType="slide" onRequestClose={() => setEditBooking(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditBooking(null)} />
+        <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
+          <ThemedText style={[styles.modalTitle, { color: colors.text }]}>Edit Booking</ThemedText>
+          <ThemedText style={[styles.modalHint, { color: colors.icon }]}>
+            Changes are only allowed while the booking is pending.
+          </ThemedText>
+
+          {/* Date & Time */}
+          <ThemedText style={[styles.modalLabel, { color: colors.text }]}>Date &amp; Time</ThemedText>
+          <Pressable
+            style={[styles.modalDateBtn, { borderColor: colors.border, backgroundColor: colors.background }]}
+            onPress={() => setShowDatePicker(true)}>
+            <ThemedText style={{ color: colors.text }}>
+              {editDate.toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' })}
+              {'  '}
+              {editDate.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+            </ThemedText>
+          </Pressable>
+          {showDatePicker && (
+            <DateTimePicker
+              value={editDate}
+              mode="datetime"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={new Date()}
+              onChange={(_, date) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (date) setEditDate(date);
+              }}
+            />
+          )}
+
+          {/* Notes */}
+          <ThemedText style={[styles.modalLabel, { color: colors.text }]}>Notes</ThemedText>
+          <TextInput
+            style={[styles.modalInput, { borderColor: colors.border, color: colors.text, backgroundColor: colors.background }]}
+            value={editNotes}
+            onChangeText={setEditNotes}
+            placeholder="Any special instructions..."
+            placeholderTextColor={colors.icon}
+            multiline
+            numberOfLines={3}
+          />
+
+          <View style={styles.modalActions}>
+            <Pressable
+              style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+              onPress={() => setEditBooking(null)}>
+              <ThemedText style={{ color: colors.text, fontWeight: '600' }}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.modalSaveBtn, { backgroundColor: colors.primary, opacity: isSaving ? 0.6 : 1 }]}
+              onPress={handleSaveEdit}
+              disabled={isSaving}>
+              <ThemedText style={{ color: '#fff', fontWeight: '700' }}>{isSaving ? 'Saving…' : 'Save Changes'}</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -401,5 +505,65 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  modalHint: {
+    fontSize: 13,
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  modalDateBtn: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  modalInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    marginBottom: 24,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  modalSaveBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 100,
+    alignItems: 'center',
   },
 });
